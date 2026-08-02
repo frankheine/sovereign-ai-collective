@@ -1,4 +1,3 @@
-// src/App.tsx
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import { useLocalRuntime, AssistantRuntimeProvider } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/thread";
@@ -35,6 +34,7 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [globalStatus, setGlobalStatus] = useState<string | null>(null);
   const [isStandalone, setIsStandalone] = useState(true);
+  const [isIOS, setIsIOS] = useState(false);
 
   const chatPanelRef = useRef<HTMLDivElement>(null);
   const bootLockRef = useRef(false);
@@ -43,8 +43,16 @@ export default function App() {
   // STANDALONE CHECK (A2HS Enforcement)
   useEffect(() => {
     const checkStandalone = () => {
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      setIsIOS(ios);
+      
       const isPWA = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-      setIsStandalone(!!isPWA);
+      
+      if (ios && !isPWA) {
+        setIsStandalone(false);
+      } else {
+        setIsStandalone(true);
+      }
     };
     checkStandalone();
   }, []);
@@ -215,7 +223,7 @@ export default function App() {
       <AssistantRuntimeProvider runtime={runtime}>
         <div className={`relative flex w-full bg-zinc-950 text-white selection:bg-violet-500/30 ${scrollMode === "container" ? "h-[100dvh] overflow-hidden" : "min-h-[100dvh]"}`}>
 
-          {!isStandalone && <A2HSOverlay />}
+          {!isStandalone && isIOS && <A2HSOverlay />}
 
           <DocumentDropzone onProgress={(status) => {
             setGlobalStatus(status);

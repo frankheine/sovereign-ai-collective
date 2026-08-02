@@ -1,10 +1,11 @@
-// src/workers/worker-client.ts
 import * as Comlink from 'comlink';
 
 export interface DBWorker {
     init(): Promise<void>;
     insertChunk(text: string, embedding: number[], metadata?: any): Promise<void>;
     hybridSearch(queryText: string, queryVector: number[], limit?: number): Promise<any[]>;
+    getAllVectors(): Promise<{id: number, vector: number[]}[]>;
+    createClusterTables(clusters: {clusterId: number, rowIds: number[]}[]): Promise<void>;
 }
 
 export interface EmbedWorker {
@@ -27,7 +28,7 @@ export interface InferenceWorker {
 }
 
 export interface LibrarianWorker {
-    runClusteringOptimization(): Promise<void>;
+    runClusteringOptimization(vectors: {id: number, vector: number[]}[]): Promise<{clusterId: number, rowIds: number[]}[]>;
 }
 
 export interface LedgerWorker {

@@ -1,4 +1,3 @@
-// src/orchestrator.ts
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
 import { dbWorker, embedWorker, rerankWorker, networkWorker, inferenceWorker, librarianWorker, ledgerWorker, killMemoryWorkers } from "./workers/worker-client";
 import * as Comlink from 'comlink';
@@ -15,6 +14,7 @@ export const GraphState = Annotation.Root({
 
 type ProgressCallback = (msg: any) => void;
 let activeProgressCallback: ProgressCallback | null = null;
+let isGenerating = false; // Mutex to prevent Jetsam crashes during background optimization
 
 export function setActiveProgressCallback(cb: ProgressCallback | null) {
     activeProgressCallback = cb;
@@ -76,6 +76,7 @@ async function retrieveNode(state: typeof GraphState.State) {
 
 async function generateNode(state: typeof GraphState.State) {
     console.log("--- GENERATE NODE ---");
+    isGenerating = true;
     const notify = (text: string) => {
         if (activeProgressCallback) activeProgressCallback({ status: 'progress', log: text });
     };
@@ -104,6 +105,8 @@ CRITICAL DIRECTIVE: If the user asks about current events, real-time data, or as
     } catch (error: any) {
         console.error("Generation Failed:", error);
         return { answer: `System error: ${error.message || String(error)}` };
+    } finally {
+        isGenerating = false;
     }
 }
 
@@ -198,13 +201,22 @@ export function startManagerAgent() {
     console.log("🛡️ [Manager Agent] Orchestrator loop initiated.");
 
     managerAgentInterval = setInterval(async () => {
+        if (isGenerating) {
+            console.log("🛡️ [Manager Agent] Inference active. Skipping optimization cycle to prevent Jetsam crash.");
+            return;
+        }
+        
         console.log("🛡️ [Manager Agent] Running background optimization cycle...");
         try {
             // 1. Clean up UI Cache
             await runDataLifecycleManager();
 
             // 2. Run Dynamic Librarian (K-Means Clustering)
-            await librarianWorker.runClusteringOptimization();
+            const vectors = await dbWorker.getAllVectors();
+            if (vectors && vectors.length > 0) {
+                const clusters = await librarianWorker.runClusteringOptimization(vectors);
+                await dbWorker.createClusterTables(clusters);
+            }
 
             // 3. Run Cold Storage Ledger (AES-256-GCM Offload)
             const encryptionKey = useSovereignStore.getState().encryptionKey;

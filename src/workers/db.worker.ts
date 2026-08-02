@@ -106,6 +106,42 @@ class DatabaseWorker {
         });
         return results;
     }
+
+    async getAllVectors() {
+        if (!this.isReady) await this.init();
+        const results: any[] = [];
+        this.db.exec({
+            sql: `SELECT rowid, vector FROM vec_chunks`,
+            callback: (row: any) => {
+                const buffer = row[1];
+                const floatArray = new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4);
+                results.push({ id: row[0], vector: Array.from(floatArray) });
+            }
+        });
+        return results;
+    }
+
+    async createClusterTables(clusters: {clusterId: number, rowIds: number[]}[]) {
+        if (!this.isReady) await this.init();
+        this.db.exec('BEGIN TRANSACTION;');
+        try {
+            for (const cluster of clusters) {
+                const tableName = `vec_chunks_cluster_${cluster.clusterId}`;
+                this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName} USING vec0(vector float[384]);`);
+                this.db.exec(`DELETE FROM ${tableName};`);
+                for (const id of cluster.rowIds) {
+                    this.db.exec({
+                        sql: `INSERT INTO ${tableName} (rowid, vector) SELECT rowid, vector FROM vec_chunks WHERE rowid = ?`,
+                        bind: [id]
+                    });
+                }
+            }
+            this.db.exec('COMMIT;');
+        } catch (e) {
+            this.db.exec('ROLLBACK;');
+            throw e;
+        }
+    }
 }
 
 Comlink.expose(new DatabaseWorker());

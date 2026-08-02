@@ -37,7 +37,7 @@
     "zustand": "latest"
   },
   "devDependencies": {
-    "@capacitor/cli": "latest",
+    "@capacitor/cli": "^8.4.2",
     "@tailwindcss/vite": "latest",
     "@types/node": "^26.1.2",
     "@types/react": "latest",
