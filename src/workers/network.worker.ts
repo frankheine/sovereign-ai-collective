@@ -1,37 +1,70 @@
+// src/workers/network.worker.ts
 import * as Comlink from 'comlink';
 
 class NetworkWorker {
+    // Public SearxNG nodes that allow CORS and return clean JSON.
+    // These act as privacy shields, stripping the user's IP before querying DDG/Google.
+    private searxngInstances = [
+        'https://searx.be',
+        'https://search.mdosch.de',
+        'https://searx.tiekoetter.com',
+        'https://paulgo.io'
+    ];
+
     async search(query: string): Promise<string[]> {
         const controller = new AbortController();
+        // Retaining your excellent 30-second timeout architecture
         const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-        try {
-            const response = await fetch("https://lite.duckduckgo.com/lite/", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `q=${encodeURIComponent(query)}`,
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
+        // Shuffle instances to distribute load and prevent rate-limiting
+        const instances = this.searxngInstances.sort(() => 0.5 - Math.random());
 
-            if (!response.ok) throw new Error(`Search failed: ${response.status}`);
+        for (const instance of instances) {
+            try {
+                // Format for JSON to eliminate brittle Regex HTML scraping
+                const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json&safesearch=1`;
 
-            const html = await response.text();
-            const snippetRegex = /<td class='result-snippet'>([\s\S]*?)<\/td>/g;
-            let match;
-            const chunks: string[] = [];
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'omit', // Enforce zero-cookie policy
+                    signal: controller.signal
+                });
 
-            while ((match = snippetRegex.exec(html)) !== null) {
-                const cleanText = match[1].replace(/<[^>]*>?/gm, '').trim();
-                if (cleanText) chunks.push(cleanText);
+                if (!response.ok) {
+                    console.warn(`[Network Worker] Node ${instance} returned ${response.status}, rotating...`);
+                    continue;
+                }
+
+                const data = await response.json();
+                clearTimeout(timeoutId);
+
+                if (data && data.results && data.results.length > 0) {
+                    const chunks: string[] = [];
+
+                    // Extract clean text directly from the JSON payload
+                    for (const result of data.results.slice(0, 5)) {
+                        const cleanText = (result.content || result.snippet || '').trim();
+                        if (cleanText) chunks.push(cleanText);
+                    }
+
+                    return chunks;
+                }
+            } catch (error: any) {
+                if (error.name === 'AbortError') {
+                    console.error("[Network Worker] Search timed out.");
+                    return [];
+                }
+                // If a node fails due to CORS or downtime, silently catch and try the next
+                console.warn(`[Network Worker] Node ${instance} failed, rotating...`);
+                continue;
             }
-
-            return chunks;
-        } catch (error) {
-            console.error("[Network Worker] Search failed:", error);
-            return [];
         }
+
+        clearTimeout(timeoutId);
+        console.error("[Network Worker] All search nodes failed or timed out.");
+        return [];
     }
 }
 
-Comlink.expose(new NetworkWorker()); 0
+Comlink.expose(new NetworkWorker());

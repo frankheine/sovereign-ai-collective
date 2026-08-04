@@ -1,12 +1,14 @@
-// src/workers/embedding.worker.ts
 import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
 // CRITICAL UPDATE: Enforce strict air-gapped execution. 
 // If the ONNX files are missing from public/models/, it will fail rather than phoning home.
+// CRITICAL UPDATE: Enforce strict air-gapped execution with absolute paths.
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-env.localModelPath = '/models/';
+
+// FIX: Bind the path to the absolute origin of the local server
+env.localModelPath = self.location.origin + '/models/';
 env.useBrowserCache = false;
 
 // Explicitly map the files so ONNX never requests the missing .jsep.wasm file
@@ -20,9 +22,10 @@ env.backends.onnx.wasm!.wasmPaths = {
     'ort-wasm-simd-threaded.jsep.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.wasm'
 } as any;
 
-// UNLEASH MULTI-THREADING & SIMD
-const availableCores = navigator.hardwareConcurrency || 4;
-env.backends.onnx.wasm!.numThreads = Math.max(1, availableCores - 1);
+// CRITICAL iOS FIX: Clamp threads to 1. 
+// Multi-threading in ONNX Web multiplies WASM memory allocation per thread.
+// Spawning multiple threads will instantly breach the 1.8GB iOS Jetsam limit.
+env.backends.onnx.wasm!.numThreads = 1;
 env.backends.onnx.wasm!.simd = true;
 env.backends.onnx.wasm!.proxy = false;
 
@@ -35,9 +38,12 @@ class EmbeddingWorker {
             if (!this.initPromise) {
                 if (onProgress) onProgress({ status: 'progress', log: '🧬 Initializing embedding model...' });
 
-                this.initPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+                // OPTIMIZATION: Author prefix 'Xenova/' removed.
+                // Explicitly targeting the local folder name.
+                this.initPromise = pipeline('feature-extraction', 'all-MiniLM-L6-v2', {
                     device: 'wasm',
                     quantized: true,
+                    local_files_only: true, // CRITICAL: Explicitly forces local routing
                     progress_callback: (data: any) => {
                         if (!onProgress) return;
                         if (data.status === 'progress' && typeof data.progress === 'number') {

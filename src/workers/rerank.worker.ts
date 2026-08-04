@@ -1,11 +1,12 @@
-// src/workers/rerank.worker.ts
 import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
-// CRITICAL UPDATE: Enforce strict air-gapped execution.
+// CRITICAL UPDATE: Enforce strict air-gapped execution with absolute paths.
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-env.localModelPath = '/models/';
+
+// FIX: Bind the path to the absolute origin of the local server
+env.localModelPath = self.location.origin + '/models/';
 env.useBrowserCache = false;
 
 // Explicitly map the files so ONNX never requests the missing .jsep.wasm file
@@ -19,8 +20,10 @@ env.backends.onnx.wasm!.wasmPaths = {
     'ort-wasm-simd-threaded.jsep.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.wasm'
 } as any;
 
-// Disable ONNX multi-threading so it doesn't spawn sub-blob workers that violate Vite's MIME rules
+// Disable ONNX multi-threading to protect iOS RAM budget and prevent Vite MIME violations
 env.backends.onnx.wasm!.numThreads = 1;
+env.backends.onnx.wasm!.simd = true;
+env.backends.onnx.wasm!.proxy = false;
 
 class RerankWorker {
     private reranker: any = null;
@@ -31,12 +34,12 @@ class RerankWorker {
             if (!this.initPromise) {
                 if (onProgress) onProgress({ status: 'progress', log: '🧠 Initializing Cross-Encoder...' });
 
-                // Force CPU: reranker only processes top-10 candidates and CPU is fast enough. 
-                // WebGPU is reserved exclusively for the inference worker to prevent shader collisions.
-                // OPTIMIZATION: Swapped to jina-reranker-v1-tiny-en (~33MB) to fit the 1.8GB RAM budget
-                this.initPromise = pipeline('text-classification', 'jinaai/jina-reranker-v1-tiny-en', {
+                // OPTIMIZATION: Author prefix 'jinaai/' removed. 
+                // Explicitly targeting the local folder name.
+                this.initPromise = pipeline('text-classification', 'jina-reranker-v1-tiny-en', {
                     device: 'wasm',
                     quantized: true,
+                    local_files_only: true, // CRITICAL: Explicitly forces local routing
                     progress_callback: (data: any) => {
                         if (!onProgress) return;
                         if (data.status === 'progress' && typeof data.progress === 'number') {
