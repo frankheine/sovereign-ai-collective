@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, FileText, MessageSquare } from 'lucide-react';
-import { runWorker } from '../rag/pipeline';
+// CRITICAL FIX: Import directly from the Comlink mesh, bypassing the deleted pipeline.ts
+import { embedWorker, dbWorker } from '../workers/worker-client';
 
 interface CommandPaletteProps {
     isOpen: boolean;
@@ -25,10 +26,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
             if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 if (isOpen) onClose();
-                else {
-                    // It should open. For now we assume parent manages state via keyboard listener,
-                    // but we can also trigger a custom event if needed.
-                }
             }
             if (e.key === 'Escape' && isOpen) {
                 onClose();
@@ -47,16 +44,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
         const timer = setTimeout(async () => {
             setIsSearching(true);
             try {
-                // Generate query embedding
-                const { embedding } = await runWorker<{ embedding: number[] }>('embed', { text: query });
-                
-                // Search via Orama
-                const { candidates } = await runWorker<{ candidates: any[] }>('retrieve', { 
-                    action: 'search', 
-                    queryVector: embedding, 
-                    queryText: query 
-                });
-                
+                // 1. Generate query embedding directly via Comlink
+                const embedding = await embedWorker.embed(query);
+
+                // 2. Search via SQLite directly via Comlink (Replaced Orama)
+                const candidates = await dbWorker.hybridSearch(query, embedding, 10);
+
                 setResults(candidates || []);
             } catch (error) {
                 console.error("Semantic search failed:", error);
@@ -122,7 +115,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
                                                     {result.text}
                                                 </div>
                                                 <div className="mt-2 text-[10px] font-mono text-white/40 flex gap-4">
-                                                    <span>Score: {(result.score * 100).toFixed(1)}%</span>
+                                                    {/* CRITICAL FIX: SQLite vec0 returns 'distance', not 'score'. 
+                                                        We convert cosine distance (0 to 2) into a rough percentage match. */}
+                                                    <span>Match: {Math.max(0, (1 - (result.distance || 0)) * 100).toFixed(1)}%</span>
                                                 </div>
                                             </div>
                                         </button>

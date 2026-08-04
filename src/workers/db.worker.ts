@@ -1,5 +1,6 @@
 // src/workers/db.worker.ts
 import * as Comlink from 'comlink';
+// CRITICAL FIX: Import from the vector-enabled build, not the standard build
 import sqlite3InitModule from 'sqlite-wasm-vec';
 
 class DatabaseWorker {

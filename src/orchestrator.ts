@@ -1,3 +1,4 @@
+// src/orchestrator.ts
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
 import { dbWorker, embedWorker, rerankWorker, networkWorker, inferenceWorker, librarianWorker, ledgerWorker, killMemoryWorkers } from "./workers/worker-client";
 import * as Comlink from 'comlink';
@@ -205,7 +206,7 @@ export function startManagerAgent() {
             console.log("🛡️ [Manager Agent] Inference active. Skipping optimization cycle to prevent Jetsam crash.");
             return;
         }
-        
+
         console.log("🛡️ [Manager Agent] Running background optimization cycle...");
         try {
             // 1. Clean up UI Cache

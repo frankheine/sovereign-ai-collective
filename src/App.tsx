@@ -1,3 +1,4 @@
+// src/App.tsx
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import { useLocalRuntime, AssistantRuntimeProvider } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/thread";
@@ -45,9 +46,9 @@ export default function App() {
     const checkStandalone = () => {
       const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
       setIsIOS(ios);
-      
+
       const isPWA = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-      
+
       if (ios && !isPWA) {
         setIsStandalone(false);
       } else {

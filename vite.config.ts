@@ -26,7 +26,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('react') || id.includes('framer-motion') || id.includes('gsap')) return 'react-vendor';
-          if (id.includes('sqlite-wasm-vec')) return 'sqlite-vendor';
+          if (id.includes('@sqlite.org')) return 'sqlite-vendor';
           if (id.includes('@huggingface')) return 'onnx-vendor';
           if (id.includes('@wllama')) return 'wllama-vendor';
         }
@@ -41,7 +41,7 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       registerType: 'autoUpdate',
-      injectManifest: {
+      injectManifest: { 
         maximumFileSizeToCacheInBytes: 260000000,
         globIgnores: ['**/*.gguf'] // Prevent model duplication in SW cache [7, 8]
       }
