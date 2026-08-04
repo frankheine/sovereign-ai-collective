@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileUp, File, CheckCircle2, AlertCircle } from 'lucide-react';
-import { getWorkers, runWorker } from '../rag/pipeline';
+// CRITICAL FIX: Import directly from the Comlink mesh, bypassing the deleted pipeline.ts
+import { embedWorker, dbWorker } from '../workers/worker-client';
 
 interface DocumentDropzoneProps {
     onProgress: (status: string) => void;
@@ -63,13 +64,15 @@ export const DocumentDropzone: React.FC<DocumentDropzoneProps> = ({ onProgress }
                 const chunk = chunks[i];
                 onProgress(`Embedding chunk ${i + 1}/${chunks.length}...`);
 
-                // Embed the chunk
-                const { embedding } = await runWorker<{ embedding: number[] }>('embed', { text: chunk }, (msg: any) => {
-                    if ((msg as any).log) onProgress((msg as any).log);
-                });
+                // 1. Generate embedding directly via Comlink
+                const embedding = await embedWorker.embed(chunk);
 
-                // Store in retrieval worker
-                await runWorker('retrieve', { action: 'insert', text: chunk, embedding });
+                // 2. Insert into SQLite directly via Comlink
+                await dbWorker.insertChunk(chunk, embedding, { 
+                    source: file.name, 
+                    type: 'document',
+                    chunkIndex: i 
+                });
             }
 
             setUploadStatus('success');
