@@ -4,7 +4,7 @@ import { pipeline, env } from '@huggingface/transformers';
 // CRITICAL UPDATE: Enforce strict air-gapped execution with absolute paths.
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-env.localModelPath = self.location.origin + '/models/';
+env.localModelPath = '/models/';
 env.useBrowserCache = false;
 
 // Explicitly map the files so ONNX never requests the missing .jsep.wasm file

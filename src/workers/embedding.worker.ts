@@ -1,10 +1,10 @@
 import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
-// RESTORED: Enforce strict air-gapped execution with absolute paths.
+// CRITICAL UPDATE: Enforce strict air-gapped execution with absolute paths.
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-env.localModelPath = self.location.origin + '/models/';
+env.localModelPath = '/models/';
 env.useBrowserCache = false;
 
 // RESTORED: Explicitly map the files so ONNX never requests the missing .jsep.wasm file
