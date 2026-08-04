@@ -4,8 +4,6 @@ import { pipeline, env } from '@huggingface/transformers';
 // CRITICAL UPDATE: Enforce strict air-gapped execution with absolute paths.
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-
-// FIX: Bind the path to the absolute origin of the local server
 env.localModelPath = self.location.origin + '/models/';
 env.useBrowserCache = false;
 

@@ -1,18 +1,13 @@
 import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
-// CRITICAL UPDATE: Enforce strict air-gapped execution. 
-// If the ONNX files are missing from public/models/, it will fail rather than phoning home.
-// CRITICAL UPDATE: Enforce strict air-gapped execution with absolute paths.
+// RESTORED: Enforce strict air-gapped execution with absolute paths.
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-
-// FIX: Bind the path to the absolute origin of the local server
 env.localModelPath = self.location.origin + '/models/';
 env.useBrowserCache = false;
 
-// Explicitly map the files so ONNX never requests the missing .jsep.wasm file
-// FIX: Cast to 'any' to bypass TS2353 type definition mismatches in Transformers.js
+// RESTORED: Explicitly map the files so ONNX never requests the missing .jsep.wasm file
 env.backends.onnx.wasm!.wasmPaths = {
     'wasm': self.location.origin + '/wasm/ort-wasm.wasm',
     'ort-wasm-simd.wasm': self.location.origin + '/wasm/ort-wasm-simd.wasm',
@@ -22,9 +17,7 @@ env.backends.onnx.wasm!.wasmPaths = {
     'ort-wasm-simd-threaded.jsep.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.wasm'
 } as any;
 
-// CRITICAL iOS FIX: Clamp threads to 1. 
-// Multi-threading in ONNX Web multiplies WASM memory allocation per thread.
-// Spawning multiple threads will instantly breach the 1.8GB iOS Jetsam limit.
+// CRITICAL FIX: Disable ONNX multi-threading to protect iOS RAM budget and prevent Vite MIME violations
 env.backends.onnx.wasm!.numThreads = 1;
 env.backends.onnx.wasm!.simd = true;
 env.backends.onnx.wasm!.proxy = false;
@@ -38,12 +31,11 @@ class EmbeddingWorker {
             if (!this.initPromise) {
                 if (onProgress) onProgress({ status: 'progress', log: '🧬 Initializing embedding model...' });
 
-                // OPTIMIZATION: Author prefix 'Xenova/' removed.
-                // Explicitly targeting the local folder name.
-                this.initPromise = pipeline('feature-extraction', 'all-MiniLM-L6-v2', {
+                // CRITICAL FIX: Force 'wasm' device. 
+                // Transformers.js v3 defaults to WebGPU, which crashes the worker and steals the GPU context from wllama.
+                this.initPromise = pipeline('feature-extraction', 'all-MiniLM-L6-v2/', {
                     device: 'wasm',
-                    quantized: true,
-                    local_files_only: true, // CRITICAL: Explicitly forces local routing
+                    dtype: 'q8',
                     progress_callback: (data: any) => {
                         if (!onProgress) return;
                         if (data.status === 'progress' && typeof data.progress === 'number') {
@@ -52,7 +44,7 @@ class EmbeddingWorker {
                             onProgress({ status: 'progress', log: `Loading Embedding Weights: ${data.status || 'Downloading'}...` });
                         }
                     }
-                } as any);
+                });
             }
             this.extractor = await this.initPromise;
             if (onProgress) onProgress({ status: 'progress', log: '✅ Embedding model ready.' });
@@ -61,8 +53,7 @@ class EmbeddingWorker {
 
     async embed(text: string, onProgress?: (msg: any) => void): Promise<number[]> {
         if (!this.extractor) await this.init(onProgress);
-
-        if (!text) return []; // Handle empty wakeup calls gracefully
+        if (!text) return [];
 
         if (onProgress) onProgress({ status: 'progress', log: '🔢 Running inference...' });
 
