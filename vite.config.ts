@@ -63,7 +63,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     // CRITICAL: Exclude libraries to prevent corruption of WASM binaries [5, 9]
-    exclude: ['@huggingface/transformers', '@sqlite.org/sqlite-wasm', '@wllama/wllama'],
+    exclude: ['@huggingface/transformers', 'sqlite-wasm-vec', '@wllama/wllama'],
     include: ['comlink', 'localforage']
   }
 });

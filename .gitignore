@@ -24,7 +24,7 @@ public/
 node_modules
 dist
 dist-ssr
-*.local
+0*.local
 check-screenshot-boot.png
 check-screenshot-chat.png
 check-screenshot-failed.png

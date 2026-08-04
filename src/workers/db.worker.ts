@@ -1,6 +1,6 @@
 // src/workers/db.worker.ts
 import * as Comlink from 'comlink';
-import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
+import sqlite3InitModule from 'sqlite-wasm-vec';
 
 class DatabaseWorker {
     private db: any = null;
@@ -121,7 +121,7 @@ class DatabaseWorker {
         return results;
     }
 
-    async createClusterTables(clusters: {clusterId: number, rowIds: number[]}[]) {
+    async createClusterTables(clusters: { clusterId: number, rowIds: number[] }[]) {
         if (!this.isReady) await this.init();
         this.db.exec('BEGIN TRANSACTION;');
         try {
