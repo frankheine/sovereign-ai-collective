@@ -22,11 +22,13 @@ export default defineConfig({
   build: {
     target: 'esnext',
     assetsInlineLimit: 0,
+    chunkSizeWarningLimit: 4000,
+//CRITICAL FIX: SUPRESS 500kb warning for massive AI vendor chunks
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (id.includes('react') || id.includes('framer-motion') || id.includes('gsap')) return 'react-vendor';
-          if (id.includes('@sqlite.org')) return 'sqlite-vendor';
+          if (id.includes('sqlite-wasm-vec')) return 'sqlite-vendor';
           if (id.includes('@huggingface')) return 'onnx-vendor';
           if (id.includes('@wllama')) return 'wllama-vendor';
         }
@@ -63,7 +65,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     // CRITICAL: Exclude libraries to prevent corruption of WASM binaries [5, 9]
-    exclude: ['@huggingface/transformers', 'sqlite-wasm-vec', '@wllama/wllama'],
+    exclude: ['@huggingface/transformers', 'sqlite-wasm-vec', '@wllama/wllama', 'onnxruntime-web'],
     include: ['comlink', 'localforage']
   }
 });
