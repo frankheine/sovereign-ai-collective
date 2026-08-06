@@ -27,8 +27,7 @@ class InferenceWorker {
 
         // Initialize Wllama with the dynamically routed WASM binary
         this.wllama = new Wllama({
-            'single-thread/wllama.wasm': wasmPath,
-            'multi-thread/wllama.wasm': wasmPath
+    'default': wasmPath
         });
 
         const root = await navigator.storage.getDirectory();

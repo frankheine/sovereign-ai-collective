@@ -32,7 +32,7 @@ export class SovereignBootloader {
 
             await Promise.all([embedPromise, rerankPromise]);
 
-            progressProxy[Comlink.releaseProxy]();
+            (progressProxy as any)[Comlink.releaseProxy]();
 
             onProgress(85, "ONNX Runtime Web initialized. Semantic engines online.");
             await this.sleep(400);
