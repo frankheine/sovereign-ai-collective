@@ -6,7 +6,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
+*.gguf
+*.wasm
+*.mjs
 # Dependencies
 node_modules
 dist
@@ -24,7 +26,7 @@ public/
 node_modules
 dist
 dist-ssr
-0*.local
+*.local
 check-screenshot-boot.png
 check-screenshot-chat.png
 check-screenshot-failed.png

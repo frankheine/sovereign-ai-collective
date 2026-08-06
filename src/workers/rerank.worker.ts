@@ -1,24 +1,27 @@
 import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
-// CRITICAL UPDATE: Enforce strict air-gapped execution with absolute paths.
-env.allowRemoteModels = false;
-env.allowLocalModels = true;
-env.localModelPath = '/models/';
-env.useBrowserCache = false;
+const isProd = import.meta.env.PROD;
+const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
 
-// Explicitly map the files so ONNX never requests the missing .jsep.wasm file
-// FIX: Cast to 'any' to bypass TS2353 type definition mismatches in Transformers.js
-env.backends.onnx.wasm!.wasmPaths = {
-    'wasm': self.location.origin + '/wasm/ort-wasm.wasm',
-    'ort-wasm-simd.wasm': self.location.origin + '/wasm/ort-wasm-simd.wasm',
-    'ort-wasm-threaded.wasm': self.location.origin + '/wasm/ort-wasm-threaded.wasm',
-    'ort-wasm-simd-threaded.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.wasm',
-    'ort-wasm-simd-threaded.jsep.mjs': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.mjs',
-    'ort-wasm-simd-threaded.jsep.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.wasm'
-} as any;
+if (isProd) {
+    // 🌐 VERCEL MODE: Route through Cloudflare Proxy
+    env.allowRemoteModels = true;
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+    env.remoteHost = PROXY_URL;
+    env.remotePathTemplate = '{model}/{file}';
+    env.backends.onnx.wasm!.wasmPaths = PROXY_URL + '/wasm/';
+} else {
+    // 💻 LOCALHOST MODE: Strict Air-Gap to Hard Drive
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+    env.localModelPath = '/models/';
+    env.useBrowserCache = false;
+    env.backends.onnx.wasm!.wasmPaths = '/wasm/';
+}
 
-// Disable ONNX multi-threading to protect iOS RAM budget and prevent Vite MIME violations
+// Protect iOS RAM
 env.backends.onnx.wasm!.numThreads = 1;
 env.backends.onnx.wasm!.simd = true;
 env.backends.onnx.wasm!.proxy = false;
@@ -32,12 +35,10 @@ class RerankWorker {
             if (!this.initPromise) {
                 if (onProgress) onProgress({ status: 'progress', log: '🧠 Initializing Cross-Encoder...' });
 
-                // OPTIMIZATION: Author prefix 'jinaai/' removed. 
-                // Explicitly targeting the local folder name.
                 this.initPromise = pipeline('text-classification', 'jina-reranker-v1-tiny-en', {
                     device: 'wasm',
-                    quantized: true,
-                    local_files_only: true, // CRITICAL: Explicitly forces local routing
+                    dtype: 'q8',
+                    local_files_only: !isProd, // CRITICAL: True on localhost, False on Vercel
                     progress_callback: (data: any) => {
                         if (!onProgress) return;
                         if (data.status === 'progress' && typeof data.progress === 'number') {
@@ -46,7 +47,7 @@ class RerankWorker {
                             onProgress({ status: 'progress', log: `Loading Cross-Encoder Weights: ${data.status || 'Downloading'}...` });
                         }
                     }
-                } as any);
+                });
             }
             this.reranker = await this.initPromise;
         }
@@ -59,20 +60,14 @@ class RerankWorker {
 
         const reranked: any[] = [];
         for (const doc of candidates) {
-            // Jina syntax: pass query and document as separate arguments, not as a nested array
             const result = await this.reranker(query, doc.text);
             reranked.push({ ...doc, rerankScore: result[0]?.score || 0 });
         }
 
-        // Sort by highest confidence scores
         reranked.sort((a: any, b: any) => b.rerankScore - a.rerankScore);
 
         if (onProgress) onProgress({ status: 'progress', log: `✨ Reranked — top ${Math.min(5, reranked.length)} passages selected.` });
 
-        // Return the full sorted array. The LangGraph orchestrator handles 
-        // dynamic token budgeting (packing until 2048 tokens or < 0.40 score).
         return reranked;
     }
 }
-
-Comlink.expose(new RerankWorker());

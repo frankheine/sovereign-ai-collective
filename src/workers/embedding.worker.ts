@@ -1,23 +1,27 @@
 import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
-// CRITICAL UPDATE: Enforce strict air-gapped execution with absolute paths.
-env.allowRemoteModels = false;
-env.allowLocalModels = true;
-env.localModelPath = '/models/';
-env.useBrowserCache = false;
+const isProd = import.meta.env.PROD;
+const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
 
-// RESTORED: Explicitly map the files so ONNX never requests the missing .jsep.wasm file
-env.backends.onnx.wasm!.wasmPaths = {
-    'wasm': self.location.origin + '/wasm/ort-wasm.wasm',
-    'ort-wasm-simd.wasm': self.location.origin + '/wasm/ort-wasm-simd.wasm',
-    'ort-wasm-threaded.wasm': self.location.origin + '/wasm/ort-wasm-threaded.wasm',
-    'ort-wasm-simd-threaded.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.wasm',
-    'ort-wasm-simd-threaded.jsep.mjs': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.mjs',
-    'ort-wasm-simd-threaded.jsep.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.wasm'
-} as any;
+if (isProd) {
+    // 🌐 VERCEL MODE: Route through Cloudflare Proxy
+    env.allowRemoteModels = true;
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+    env.remoteHost = PROXY_URL;
+    env.remotePathTemplate = '{model}/{file}';
+    env.backends.onnx.wasm!.wasmPaths = PROXY_URL + '/wasm/';
+} else {
+    // 💻 LOCALHOST MODE: Strict Air-Gap to Hard Drive
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+    env.localModelPath = '/models/';
+    env.useBrowserCache = false;
+    env.backends.onnx.wasm!.wasmPaths = '/wasm/';
+}
 
-// CRITICAL FIX: Disable ONNX multi-threading to protect iOS RAM budget and prevent Vite MIME violations
+// Protect iOS RAM
 env.backends.onnx.wasm!.numThreads = 1;
 env.backends.onnx.wasm!.simd = true;
 env.backends.onnx.wasm!.proxy = false;
@@ -31,11 +35,10 @@ class EmbeddingWorker {
             if (!this.initPromise) {
                 if (onProgress) onProgress({ status: 'progress', log: '🧬 Initializing embedding model...' });
 
-                // CRITICAL FIX: Force 'wasm' device. 
-                // Transformers.js v3 defaults to WebGPU, which crashes the worker and steals the GPU context from wllama.
-                this.initPromise = pipeline('feature-extraction', 'all-MiniLM-L6-v2/', {
+                this.initPromise = pipeline('feature-extraction', 'all-MiniLM-L6-v2', {
                     device: 'wasm',
                     dtype: 'q8',
+                    local_files_only: !isProd, // CRITICAL: True on localhost, False on Vercel
                     progress_callback: (data: any) => {
                         if (!onProgress) return;
                         if (data.status === 'progress' && typeof data.progress === 'number') {
