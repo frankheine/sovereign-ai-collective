@@ -21,7 +21,8 @@ dist-ssr
 Thumbs.db
 
 # old .gitignore
-public/
+public/models/*
+public/sovereign-models/*
 .gemini
 node_modules
 dist
@@ -46,6 +47,7 @@ check-screenshot.png
 agent_checkpoint*.png
 uncutstash_ai_v1.0.1/
 README.md
+master*
 
 # ACTIVATE FOR COMPONENT ONLY REPOMIX
 # src/lib/*

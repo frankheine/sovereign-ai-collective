@@ -1,16 +1,16 @@
 {
-    "name": "Sovereign AI Core",
-    "short_name": "Sovereign",
-    "description": "Local-First Sovereign Intelligence",
+    "name": "Sovereign AI Collective",
+    "short_name": "Sovereign AI",
+    "description": "Building The AI Infrastructure of The Future",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#000000",
     "theme_color": "#8b5cf6",
     "icons": [
         {
-            "src": "favicon.svg",
+            "src": "assets/favicon.png",
             "sizes": "512x512",
-            "type": "image/svg+xml",
+            "type": "image/png",
             "purpose": "any maskable"
         }
     ]
