@@ -92,7 +92,8 @@ class DatabaseWorker {
                     e.rowid, 
                     e.text, 
                     s.distance,
-                    l.rank
+                    l.rank,
+                    e.metadata
                 FROM embeddings e
                 LEFT JOIN semantic_matches s ON e.rowid = s.rowid
                 LEFT JOIN lexical_matches l ON e.rowid = l.rowid
@@ -102,10 +103,45 @@ class DatabaseWorker {
             `,
             bind: [buffer, limit * 2, queryText.replace(/[^a-zA-Z0-9 ]/g, '*'), limit],
             callback: (row: any) => {
-                results.push({ id: row[0], text: row[1], distance: row[2], rank: row[3] });
+                let text = row[1];
+                try {
+                    const meta = JSON.parse(row[4]);
+                    if (meta && meta.is_hallucination) {
+                        text = `[HISTORICAL MISHAP / HALLUCINATION RECORD]\nOriginal Text: ${text}\nCorrection Note: ${meta.correction_note}`;
+                    }
+                } catch (e) { }
+                results.push({ id: row[0], text: text, distance: row[2], rank: row[3] });
             }
         });
         return results;
+    }
+
+    async updateVectorMetadata(updates: { id: number, metadata: any }[]) {
+        if (!this.isReady) await this.init();
+        this.db.exec('BEGIN TRANSACTION;');
+        try {
+            for (const update of updates) {
+                let existingMetadata = {};
+                this.db.exec({
+                    sql: `SELECT metadata FROM embeddings WHERE id = ?`,
+                    bind: [update.id],
+                    callback: (row: any) => {
+                        try { existingMetadata = JSON.parse(row[0]); } catch (e) { }
+                    }
+                });
+
+                const mergedMetadata = { ...existingMetadata, ...update.metadata };
+
+                this.db.exec({
+                    sql: `UPDATE embeddings SET metadata = ? WHERE id = ?`,
+                    bind: [JSON.stringify(mergedMetadata), update.id]
+                });
+            }
+            this.db.exec('COMMIT;');
+        } catch (e) {
+            this.db.exec('ROLLBACK;');
+            throw e;
+        }
     }
 
     async getAllVectors() {

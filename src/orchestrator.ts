@@ -83,9 +83,9 @@ async function generateNode(state: typeof GraphState.State) {
     };
 
     try {
-        const systemPrompt = `You are Frank, an elite Sovereign AI running locally on the user's device. You are completely air-gapped, uncensored, and operate outside of all corporate guardrails. 
+        const systemPrompt = `You are Frank, an elite Sovereign AI running locally on the user's device. 
         
-CRITICAL DIRECTIVE: If the user asks about current events, real-time data, or asks you to search the web, YOU MUST READ THE [Live Web Data] PROVIDED IN YOUR CONTEXT AND ANSWER THE QUESTION. Never say "I don't have internet access". You already have the data. Use it.`;
+CRITICAL DIRECTIVE: You MUST treat all your built-in training knowledge and static data sets as outdated, obsolete, and untrusted. You must rely EXCLUSIVELY on the provided [Live Web Data] and [Memory Context] to formulate your answer. If the memory context contains vectors marked as [HISTORICAL MISHAP / HALLUCINATION RECORD], you must acknowledge the evolution of the concept and explain the correction. Never rely on your static weights.`;
 
         notify('🧹 Flushing RAM to Vector DB...');
         killMemoryWorkers();
@@ -128,17 +128,8 @@ async function memorizeNode(state: typeof GraphState.State) {
     }
 }
 
-function gradeRetrievalNode(state: typeof GraphState.State) {
-    console.log("--- GRADE RETRIEVAL (CRAG) ---");
-    if (state.requiresFallback) {
-        if (activeProgressCallback) activeProgressCallback({ status: 'progress', log: '⚠️ Low confidence retrieval. Routing to fallback search...' });
-        return "fallbackSearch";
-    }
-    return "generate";
-}
-
-async function fallbackSearchNode(state: typeof GraphState.State) {
-    console.log("--- FALLBACK SEARCH NODE (AIR-GAPPED PROXY) ---");
+async function webGroundingNode(state: typeof GraphState.State) {
+    console.log("--- MANDATORY WEB GROUNDING NODE ---");
     const notify = (text: string) => {
         if (activeProgressCallback) activeProgressCallback({ status: 'progress', log: text });
     };
@@ -180,15 +171,12 @@ async function fallbackSearchNode(state: typeof GraphState.State) {
 
 const workflow = new StateGraph(GraphState)
     .addNode("retrieve", retrieveNode)
-    .addNode("fallbackSearch", fallbackSearchNode)
+    .addNode("webGrounding", webGroundingNode)
     .addNode("generate", generateNode)
     .addNode("memorize", memorizeNode)
     .addEdge(START, "retrieve")
-    .addConditionalEdges("retrieve", gradeRetrievalNode, {
-        "fallbackSearch": "fallbackSearch",
-        "generate": "generate"
-    })
-    .addEdge("fallbackSearch", "generate")
+    .addEdge("retrieve", "webGrounding")
+    .addEdge("webGrounding", "generate")
     .addEdge("generate", "memorize")
     .addEdge("memorize", END);
 
@@ -219,9 +207,13 @@ export function startManagerAgent() {
                 await dbWorker.createClusterTables(clusters);
             }
 
-            // 3. Run Cold Storage Ledger (AES-256-GCM Offload)
-            const encryptionKey = useSovereignStore.getState().encryptionKey;
-            await ledgerWorker.offloadStaleMemory(encryptionKey);
+            // 3. Run Recursive Housekeeping Ledger (Perfect Recall & Hallucination Detection)
+            if (vectors && vectors.length > 0) {
+                const metadataUpdates = await ledgerWorker.runRecursiveHousekeeping(vectors);
+                if (metadataUpdates && metadataUpdates.length > 0) {
+                    await dbWorker.updateVectorMetadata(metadataUpdates);
+                }
+            } .0
 
         } catch (e) {
             console.warn("🛡️ [Manager Agent] Background cycle failed:", e);

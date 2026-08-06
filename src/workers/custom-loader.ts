@@ -58,7 +58,7 @@ export class SovereignBootloader {
                 const isProd = import.meta.env.PROD;
                 const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
                 const formattedTarget = targetModel.startsWith('/') ? targetModel : `/${targetModel}`;
-                
+
                 const fetchUrl = isProd ? `${PROXY_URL}${formattedTarget}` : `${self.location.origin}${formattedTarget}`;
 
                 const response = await fetch(fetchUrl);
@@ -81,13 +81,13 @@ export class SovereignBootloader {
                         onProgress(scaledPct, `Downloading GGUF model... ${pct}%`);
                     } // <-- Closes the if(total) block
                 } // <-- Closes the while(true) loop
-                
+
                 await writable.close();
                 onProgress(98, "Model downloaded and cached in OPFS.");
             }
-            
+
             onProgress(100, "Sovereign AI Boot Sequence Complete.");
-            
+
         } catch (error) {
             console.error("Boot sequence failed:", error);
             throw error;
