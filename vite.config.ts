@@ -44,17 +44,6 @@ export default defineConfig({
         globIgnores: ['**/*.gguf']
       }
     }),
-    {
-      name: 'wasm-mime',
-      configureServer(server) {
-        server.middlewares.use((req, res, next) => {
-          if (req.url?.endsWith('.wasm')) {
-            res.setHeader('Content-Type', 'application/wasm')
-          }
-          next()
-        })
-      }
-    }
   ],
   assetsInclude: ['**/*.wasm', '**/*.json', '**/*.onnx'],
   server: {
