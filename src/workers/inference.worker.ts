@@ -22,7 +22,7 @@ class InferenceWorker {
 
         this.modelPath = modelPath;
 
-        // 🌐 DYNAMIC WASM ROUTING: Cloudflare Proxy in Prod, Localhost in Dev
+        // 🌐 DYNAMIC ROUTING: Cloudflare Worker in Vercel Production, Localhost in Dev
         const isProd = import.meta.env.PROD;
         const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
         const wasmPath = isProd
@@ -41,7 +41,8 @@ class InferenceWorker {
         const fileHandle = await root.getFileHandle(modelName);
         const file = await fileHandle.getFile();
 
-        await this.wllama.loadModel(file, {
+        // FIX: Using non-null assertion to satisfy TS compiler after constructor check
+        await this.wllama!.loadModel([file], {
             n_ctx: 2048, // Strictly finite context window (The Desk)
         });
 
@@ -62,15 +63,16 @@ class InferenceWorker {
         let generatedText = "";
 
         try {
-            // Execute WASM inference
-            generatedText = await this.wllama.createCompletion(fullPrompt, {
+            // Execute WASM inference using the v3.x single-object signature
+            generatedText = await (this.wllama as any).createCompletion({
+                prompt: fullPrompt,
                 nPredict: 2048,
                 sampling: {
                     temp: 0.3, // Low temperature for RAG precision
                     top_p: 0.9,
                 },
-                onNewToken: (token: number, piece: Uint8Array | string, currentText: string) => {
-                    // Handle piece whether wllama passes Uint8Array or pre-decoded string
+                onNewToken: (token: number, piece: Uint8Array | string) => {
+                    // Robust piece handling for cross-version compatibility
                     const tokenStr = piece instanceof Uint8Array ? new TextDecoder().decode(piece) : piece;
                     onProgress({ delta: tokenStr });
                 }

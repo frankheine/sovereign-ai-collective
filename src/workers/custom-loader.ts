@@ -59,7 +59,7 @@ export class SovereignBootloader {
                 fileHandle = await root.getFileHandle(modelName, { create: true });
                 const writable = await fileHandle.createWritable();
 
-                // 🌐 DYNAMIC GGUF ROUTING: Secure R2 proxy in Prod, Local localhost public/ folder in Dev
+                // 🌐 GGUF MODEL DYNAMIC ROUTING: Cloudflare Worker in Vercel Production, Localhost in Dev
                 const isProd = import.meta.env.PROD;
                 const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
                 const modelUrl = isProd

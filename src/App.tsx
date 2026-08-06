@@ -41,21 +41,16 @@ export default function App() {
   const bootLockRef = useRef(false);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // STANDALONE CHECK (A2HS Enforcement)
   useEffect(() => {
-    const checkStandalone = () => {
-      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-      setIsIOS(ios);
+    // Detect iOS via user agent to prevent locking out standard browsers
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    const isPWA = window.matchMedia('(display-mode: standalone)').matches;
 
-      const isPWA = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-
-      if (ios && !isPWA) {
-        setIsStandalone(false);
-      } else {
-        setIsStandalone(true);
-      }
-    };
-    checkStandalone();
+    if (isIOS) {
+      setIsStandalone(isPWA);
+    } else {
+      setIsStandalone(true); // Always allow desktop, Windows, Android, and macOS
+    }
   }, []);
 
   // BOOT SEQUENCE (Dynamic Model Router Integration)
