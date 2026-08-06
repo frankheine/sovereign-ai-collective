@@ -37,9 +37,12 @@ export const DocumentDropzone: React.FC<DocumentDropzoneProps> = ({ onProgress }
     }, []);
 
     const processFile = async (file: File) => {
-        if (!file.name.endsWith('.txt') && !file.name.endsWith('.md')) {
-            // For Phase 1, we limit to text/markdown for simple chunking
-            onProgress(`Error: Unsupported file type ${file.name}. Only .txt and .md are supported for now.`);
+        const isText = file.name.endsWith('.txt') || file.name.endsWith('.md');
+        const isPDF = file.name.endsWith('.pdf');
+        const isDocx = file.name.endsWith('.docx');
+
+        if (!isText && !isPDF && !isDocx) {
+            onProgress(`Error: Unsupported file type ${file.name}. Supported: .txt, .md, .pdf, .docx.`);
             setUploadStatus('error');
             setTimeout(() => setUploadStatus('idle'), 3000);
             return;
@@ -49,7 +52,30 @@ export const DocumentDropzone: React.FC<DocumentDropzoneProps> = ({ onProgress }
         onProgress(`Processing document: ${file.name}`);
 
         try {
-            const text = await file.text();
+            let text = "";
+            if (isText) {
+                text = await file.text();
+            } else if (isDocx) {
+                onProgress(`Extracting DOCX contents...`);
+                // Dynamic import to protect the 1.8GB iOS RAM budget
+                const mammoth = await import('mammoth');
+                const arrayBuffer = await file.arrayBuffer();
+                const result = await mammoth.extractRawText({ arrayBuffer });
+                text = result.value;
+            } else if (isPDF) {
+                onProgress(`Extracting PDF contents (RAM-conscious mode)...`);
+                // Dynamic import to protect the 1.8GB iOS RAM budget
+                const pdfjsLib = await import('pdfjs-dist');
+                // CRITICAL FIX: Bundle worker locally to maintain 100% air-gapped Zero-Trust CSP
+                pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map((item: any) => item.str).join(' ') + "\n";
+                }
+            }
 
             // Extremely basic chunking for phase 1
             const chunkSize = 1000;
@@ -68,10 +94,10 @@ export const DocumentDropzone: React.FC<DocumentDropzoneProps> = ({ onProgress }
                 const embedding = await embedWorker.embed(chunk);
 
                 // 2. Insert into SQLite directly via Comlink
-                await dbWorker.insertChunk(chunk, embedding, { 
-                    source: file.name, 
+                await dbWorker.insertChunk(chunk, embedding, {
+                    source: file.name,
                     type: 'document',
-                    chunkIndex: i 
+                    chunkIndex: i
                 });
             }
 
