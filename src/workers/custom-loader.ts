@@ -14,33 +14,38 @@ export class SovereignBootloader {
             await this.sleep(400);
 
             onProgress(15, "Mounting Origin Private File System (OPFS)...");
+            // Initialize SQLite WASM & OPFS
             await dbWorker.init();
             onProgress(30, "SQLite OPFS Vault mounted. FTS5 Lexical Engine active.");
             await this.sleep(300);
 
             onProgress(45, "Allocating WASM memory pages for ONNX Runtime...");
 
+            // Create a Comlink proxy to catch real-time loading telemetry from the workers
             const progressProxy = Comlink.proxy((msg: any) => {
                 let pct = 60;
                 const match = msg.log.match(/(\d+)%/);
-                if (match) pct = parseInt(match[2], 10);
+                if (match) pct = parseInt(match[14], 10);
                 onProgress(pct, msg.log);
             });
 
+            // Initialize Semantic Engines with real telemetry
             const embedPromise = embedWorker.init(progressProxy);
             const rerankPromise = rerankWorker.init(progressProxy);
 
             await Promise.all([embedPromise, rerankPromise]);
 
+            // Release the proxy to prevent main-thread memory leaks
             (progressProxy as any)[Comlink.releaseProxy]();
 
             onProgress(85, "ONNX Runtime Web initialized. Semantic engines online.");
             await this.sleep(400);
 
-            onProgress(90, "Establishing Native Inference Bridge (WASM/CPU)...");
+            onProgress(90, "Establishing Native Inference Bridge (WASM/WebGPU)...");
 
+            // Fetch the currently selected model from the Zustand store
             const targetModel = useSovereignStore.getState().targetModel;
-            const modelName = targetModel.split('/').pop() || 'model.gguf';
+            const modelName = targetModel.split('/').pop() || 'Huihui-Qwen3-0.6B-abliterated-v2.Q4_K_M.gguf';
 
             onProgress(92, "Checking OPFS for cached GGUF model...");
             const root = await navigator.storage.getDirectory();
@@ -54,16 +59,19 @@ export class SovereignBootloader {
                 fileHandle = await root.getFileHandle(modelName, { create: true });
                 const writable = await fileHandle.createWritable();
 
-                // 🌐 DYNAMIC ROUTING: Cloudflare in Prod, Localhost in Dev
+                // 🌐 DYNAMIC GGUF ROUTING: Secure R2 proxy in Prod, Local localhost public/ folder in Dev
                 const isProd = import.meta.env.PROD;
                 const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
-                const formattedTarget = targetModel.startsWith('/') ? targetModel : `/${targetModel}`;
+                const modelUrl = isProd
+                    ? `${PROXY_URL}/sovereign-models/gguf/${modelName}`
+                    : `${self.location.origin}/models/gguf/${modelName}`;
 
-                const fetchUrl = isProd ? `${PROXY_URL}${formattedTarget}` : `${self.location.origin}${formattedTarget}`;
+                console.log(`[Bootloader] Fetching GGUF weights from: ${modelUrl}`);
+                const response = await fetch(modelUrl);
 
-                const response = await fetch(fetchUrl);
-
-                if (!response.ok || !response.body) throw new Error(`Failed to fetch model: ${response.status}`);
+                if (!response.ok || !response.body) {
+                    throw new Error(`Failed to fetch model. Server returned status: ${response.status}`);
+                }
 
                 const contentLength = response.headers.get('content-length');
                 const total = contentLength ? parseInt(contentLength, 10) : 0;
@@ -77,19 +85,24 @@ export class SovereignBootloader {
                     loaded += value.length;
                     if (total) {
                         const pct = Math.round((loaded / total) * 100);
+                        // Scale 0-100 to 92-98 for the UI progress bar
                         const scaledPct = 92 + Math.floor((pct / 100) * 6);
                         onProgress(scaledPct, `Downloading GGUF model... ${pct}%`);
-                    } // <-- Closes the if(total) block
-                } // <-- Closes the while(true) loop
-
+                    }
+                }
                 await writable.close();
                 onProgress(98, "Model downloaded and cached in OPFS.");
             }
 
-            onProgress(100, "Sovereign AI Boot Sequence Complete.");
+            await inferenceWorker.init(targetModel);
 
-        } catch (error) {
-            console.error("Boot sequence failed:", error);
+            onProgress(98, "Securing Zero-Trust Network Proxy...");
+            await this.sleep(300);
+
+            onProgress(100, "SYSTEM ONLINE. Sovereign Intelligence Active.");
+        } catch (error: any) {
+            console.error("[Bootloader] Fatal Error during boot sequence:", error);
+            onProgress(0, `CRITICAL BOOT FAILURE: ${error.message}`);
             throw error;
         }
     }

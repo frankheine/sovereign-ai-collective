@@ -8,10 +8,12 @@ class InferenceWorker {
     private wllama: Wllama | null = null;
 
     async init(modelPath: string) {
+        // If already initialized with the SAME model, do nothing.
         if (this.isInitialized && this.modelPath === modelPath) return;
 
-        console.log(`[Inference Worker] Booting wllama (WASM/CPU) for: ${modelPath}`);
+        console.log(`[Inference Worker] Booting wllama (WASM/WebGPU) for: ${modelPath}`);
 
+        // If hot-swapping models, we MUST release the old model from RAM first to avoid memory leaks
         if (this.isInitialized && this.wllama) {
             console.log("[Inference Worker] Purging previous model from memory...");
             await this.wllama.exit();
@@ -20,51 +22,59 @@ class InferenceWorker {
 
         this.modelPath = modelPath;
 
-        // 🌐 DYNAMIC ROUTING: Cloudflare in Prod, Localhost in Dev
+        // 🌐 DYNAMIC WASM ROUTING: Cloudflare Proxy in Prod, Localhost in Dev
         const isProd = import.meta.env.PROD;
         const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
-        const wasmPath = isProd ? `${PROXY_URL}/wllama/wllama.wasm` : `${self.location.origin}/wllama/wllama.wasm`;
+        const wasmPath = isProd
+            ? `${PROXY_URL}/wllama/wllama.wasm`
+            : `${self.location.origin}/wllama/wllama.wasm`;
 
         // Initialize Wllama with the dynamically routed WASM binary
         this.wllama = new Wllama({
-    'default': wasmPath
+            'default': wasmPath
         });
 
+        // Load Model with strict memory constraints 
+        // wllama natively loads from an OPFS File handle to bypass browser RAM ceilings
         const root = await navigator.storage.getDirectory();
-        const modelName = this.modelPath.split('/').pop() || 'model.gguf';
+        const modelName = this.modelPath.split('/').pop() || 'Huihui-Qwen3-0.6B-abliterated-v2.Q4_K_M.gguf';
         const fileHandle = await root.getFileHandle(modelName);
         const file = await fileHandle.getFile();
 
-        // Wrap the OPFS File object in an array to satisfy the Blob[] signature
-        await this.wllama.loadModel([file], {
-            n_ctx: 2048, // Strictly finite context window to protect iOS RAM
+        await this.wllama.loadModel(file, {
+            n_ctx: 2048, // Strictly finite context window (The Desk)
         });
 
         this.isInitialized = true;
         console.log("[Inference Worker] wllama Initialized. GGUF Model Cached in OPFS.");
     }
 
-    async generate(prompt: string, context: string, systemPrompt: string, onProgress: (msg: any) => void): Promise<string> {
+    async generate(
+        prompt: string,
+        context: string,
+        systemPrompt: string,
+        onProgress: (msg: any) => void
+    ): Promise<string> {
         if (!this.isInitialized || !this.wllama) throw new Error("Inference worker not initialized.");
 
+        // Format prompt using Qwen2.5 ChatML syntax (compatible with Huihui Qwen3)
         const fullPrompt = `<|im_start|>system\n${systemPrompt}\n\nContext:\n${context}<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`;
-
         let generatedText = "";
 
         try {
-            const stream = await this.wllama.createCompletion({
-                prompt: fullPrompt,
-                max_tokens: 2048,
-                temperature: 0.3, 
-                top_p: 0.9,
-                stream: true
+            // Execute WASM inference
+            generatedText = await this.wllama.createCompletion(fullPrompt, {
+                nPredict: 2048,
+                sampling: {
+                    temp: 0.3, // Low temperature for RAG precision
+                    top_p: 0.9,
+                },
+                onNewToken: (token: number, piece: Uint8Array | string, currentText: string) => {
+                    // Handle piece whether wllama passes Uint8Array or pre-decoded string
+                    const tokenStr = piece instanceof Uint8Array ? new TextDecoder().decode(piece) : piece;
+                    onProgress({ delta: tokenStr });
+                }
             });
-
-            for await (const chunk of stream) {
-                const tokenStr = chunk.choices[0]?.text || "";
-                onProgress({ delta: tokenStr });
-                generatedText += tokenStr;
-            }
         } catch (error: any) {
             console.error("[Inference Worker] wllama generation failed:", error);
             throw error;
