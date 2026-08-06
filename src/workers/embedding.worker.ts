@@ -1,3 +1,4 @@
+// src/workers/embedding.worker.ts
 import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
@@ -10,15 +11,15 @@ if (isProd) {
     env.allowLocalModels = false;
     env.useBrowserCache = true;
     env.remoteHost = PROXY_URL;
-    env.remotePathTemplate = '{model}/{file}';
+    env.remotePathTemplate = '/models/{model}/{file}';
     env.backends.onnx.wasm!.wasmPaths = PROXY_URL + '/wasm/';
 } else {
     // 💻 LOCALHOST MODE: Strict Air-Gap to Hard Drive
     env.allowRemoteModels = false;
     env.allowLocalModels = true;
-    env.localModelPath = '/models/';
+    env.localModelPath = self.location.origin + '/models/';
     env.useBrowserCache = false;
-    env.backends.onnx.wasm!.wasmPaths = '/wasm/';
+    env.backends.onnx.wasm!.wasmPaths = self.location.origin + '/wasm/';
 }
 
 // Protect iOS RAM
@@ -38,7 +39,7 @@ class EmbeddingWorker {
                 this.initPromise = pipeline('feature-extraction', 'all-MiniLM-L6-v2', {
                     device: 'wasm',
                     dtype: 'q8',
-                    local_files_only: !isProd, // CRITICAL: True on localhost, False on Vercel
+                    local_files_only: !isProd, // True on localhost, False on Vercel
                     progress_callback: (data: any) => {
                         if (!onProgress) return;
                         if (data.status === 'progress' && typeof data.progress === 'number') {

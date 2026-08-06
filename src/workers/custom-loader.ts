@@ -1,3 +1,4 @@
+// src/workers/custom-loader.ts
 import { dbWorker, embedWorker, rerankWorker, inferenceWorker } from './worker-client';
 import { useSovereignStore } from '../store';
 import * as Comlink from 'comlink';
@@ -36,7 +37,7 @@ export class SovereignBootloader {
             onProgress(85, "ONNX Runtime Web initialized. Semantic engines online.");
             await this.sleep(400);
 
-            onProgress(90, "Establishing Native Inference Bridge (WASM/WebGPU)...");
+            onProgress(90, "Establishing Native Inference Bridge (WASM/CPU)...");
 
             const targetModel = useSovereignStore.getState().targetModel;
             const modelName = targetModel.split('/').pop() || 'model.gguf';
@@ -53,14 +54,16 @@ export class SovereignBootloader {
                 fileHandle = await root.getFileHandle(modelName, { create: true });
                 const writable = await fileHandle.createWritable();
 
-                // 🌐 DYNAMIC ROUTING: Use Cloudflare on Vercel, Local path on Localhost
+                // 🌐 DYNAMIC ROUTING: Cloudflare in Prod, Localhost in Dev
                 const isProd = import.meta.env.PROD;
                 const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
-                const fetchUrl = isProd ? `${PROXY_URL}${targetModel}` : targetModel;
+                const formattedTarget = targetModel.startsWith('/') ? targetModel : `/${targetModel}`;
+                
+                const fetchUrl = isProd ? `${PROXY_URL}${formattedTarget}` : `${self.location.origin}${formattedTarget}`;
 
                 const response = await fetch(fetchUrl);
 
-                if (!response.ok || !response.body) throw new Error("Failed to fetch model");
+                if (!response.ok || !response.body) throw new Error(`Failed to fetch model: ${response.status}`);
 
                 const contentLength = response.headers.get('content-length');
                 const total = contentLength ? parseInt(contentLength, 10) : 0;
@@ -76,22 +79,3 @@ export class SovereignBootloader {
                         const pct = Math.round((loaded / total) * 100);
                         const scaledPct = 92 + Math.floor((pct / 100) * 6);
                         onProgress(scaledPct, `Downloading GGUF model... ${pct}%`);
-                    }
-                }
-                await writable.close();
-                onProgress(98, "Model downloaded and cached in OPFS.");
-            }
-
-            await inferenceWorker.init(targetModel);
-
-            onProgress(98, "Securing Zero-Trust Network Proxy...");
-            await this.sleep(300);
-
-            onProgress(100, "SYSTEM ONLINE. Sovereign Intelligence Active.");
-        } catch (error: any) {
-            console.error("[Bootloader] Fatal Error:", error);
-            onProgress(0, `CRITICAL BOOT FAILURE: ${error.message}`);
-            throw error;
-        }
-    }
-}
