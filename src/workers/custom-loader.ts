@@ -79,3 +79,8 @@ export class SovereignBootloader {
                         const pct = Math.round((loaded / total) * 100);
                         const scaledPct = 92 + Math.floor((pct / 100) * 6);
                         onProgress(scaledPct, `Downloading GGUF model... ${pct}%`);
+                    } // <-- Closes the if(total) block
+                } // <-- Closes the while(true) loop
+                
+                await writable.close();
+                onProgress(98, "Model downloaded and cached in OPFS.");
