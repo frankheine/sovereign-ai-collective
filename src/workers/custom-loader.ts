@@ -84,3 +84,13 @@ export class SovereignBootloader {
                 
                 await writable.close();
                 onProgress(98, "Model downloaded and cached in OPFS.");
+            }
+            
+            onProgress(100, "Sovereign AI Boot Sequence Complete.");
+            
+        } catch (error) {
+            console.error("Boot sequence failed:", error);
+            throw error;
+        }
+    }
+}
