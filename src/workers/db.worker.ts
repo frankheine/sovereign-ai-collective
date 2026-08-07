@@ -124,19 +124,32 @@ class DatabaseWorker {
     async updateVectorMetadata(updates: { id: number, metadata: any }[]): Promise<void> {
         if (!this.isReady) await this.init();
 
-        this.db.exec('BEGIN TRANSACTION;');
+        this.db.exec("BEGIN TRANSACTION;");
         try {
             for (const update of updates) {
-                // FIX: Standardized on vec_chunks and rowid per God Node architecture
+                const rows: any[] = [];
                 this.db.exec({
-                    sql: 'UPDATE vec_chunks SET metadata = ? WHERE rowid = ?',
-                    bind: [JSON.stringify(update.metadata), update.id]
+                    sql: "SELECT metadata FROM embeddings WHERE id = ?",
+                    bind: [update.id],
+                    callback: (row: any) => rows.push(row)
+                });
+
+                let existingMetadata: any = {};
+                if (rows.length > 0 && rows[0][0]) {
+                    try { existingMetadata = JSON.parse(rows[0][0]); } catch (_) { }
+                }
+
+                const mergedMetadata = { ...existingMetadata, ...update.metadata };
+
+                this.db.exec({
+                    sql: "UPDATE embeddings SET metadata = ? WHERE id = ?",
+                    bind: [JSON.stringify(mergedMetadata), update.id]
                 });
             }
-            this.db.exec('COMMIT;');
-            console.log(`🧊 [DB Worker] Metadata synced for ${updates.length} vectors.`);
+            this.db.exec("COMMIT;");
+            console.log(`[DB Worker] Metadata synced for ${updates.length} vectors.`);
         } catch (error: any) {
-            this.db.exec('ROLLBACK;');
+            this.db.exec("ROLLBACK;");
             console.error("[DB Worker] Metadata sync failed:", error);
             throw error;
         }
@@ -154,10 +167,10 @@ class DatabaseWorker {
         this.db.exec({
             sql: 'SELECT rowid, vector FROM vec_chunks',
             callback: (row: any) => {
-                // FIX: row is rowid, row[2] is the vector blob. 
-                // Index 10 is Out-of-Bounds and will crash the WASM heap.
-                const buffer = row[2];
+                // FIX: row is rowid, row[2] is the binary vector blob. 
+                const buffer = row[1];
                 if (!buffer) return;
+
 
                 const floatArray = new Float32Array(
                     buffer.buffer,
@@ -165,7 +178,7 @@ class DatabaseWorker {
                     buffer.byteLength / 4
                 );
                 results.push({
-                    id: row, // FIX: Correctly extract scalar ID for the Librarian
+                    id: row[0], // FIX: Extract scalar ID for Librarian K-Means
                     vector: Array.from(floatArray)
                 });
             }
@@ -186,7 +199,7 @@ class DatabaseWorker {
             for (const cluster of clusters) {
                 const tableName = `vec_chunks_cluster_${cluster.clusterId}`;
                 // Ensure 384-dim parity with all-MiniLM-L6-v2
-                this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName} USING vec0(vector float[3]);`);
+                this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName} USING vec0(vector float[384]);`);
                 this.db.exec(`DELETE FROM ${tableName};`);
 
                 for (const id of cluster.rowIds) {
@@ -205,70 +218,4 @@ class DatabaseWorker {
         }
     }
 } // End Class
-
-const mergedMetadata = { ...existingMetadata, ...update.metadata };
-
-this.db.exec({
-    sql: `UPDATE embeddings SET metadata = ? WHERE id = ?`,
-    bind: [JSON.stringify(mergedMetadata), update.id]
-});
-
-this.db.exec('COMMIT;');
-        } catch (e) {
-    this.db.exec('ROLLBACK;');
-    throw e;
-}
-    }
-
-    /**
-   * SEMANTIC RETRIEVAL:
-   * Fetches the entire vector set for the Librarian's K-Means clustering cycle.
-   * Utilizes new Float32Array on the raw blob buffer for 100% fidelity reconstruction.
-   */
-  async getAllVectors(): Promise < { id: number, vector: number[] }[] > {
-    if(!this.isReady) await this.init();
-
-    const results: { id: number, vector: number[] } [] = [];
-this.db.exec({
-    sql: 'SELECT rowid, vector FROM vec_chunks',
-    callback: (row: any) => {
-        // Correctly handle SQLite WASM binary blobs
-        const buffer = row[10];
-        const floatArray = new Float32Array(
-            buffer.buffer,
-            buffer.byteOffset,
-            buffer.byteLength / 4
-        );
-        results.push({
-            id: row,
-            vector: Array.from(floatArray)
-        });
-    }
-});
-return results;
-  }
-
-
-    async createClusterTables(clusters: { clusterId: number, rowIds: number[] }[]) {
-    if (!this.isReady) await this.init();
-    this.db.exec('BEGIN TRANSACTION;');
-    try {
-        for (const cluster of clusters) {
-            const tableName = `vec_chunks_cluster_${cluster.clusterId}`;
-            this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName} USING vec0(vector float[384]);`);
-            this.db.exec(`DELETE FROM ${tableName};`);
-            for (const id of cluster.rowIds) {
-                this.db.exec({
-                    sql: `INSERT INTO ${tableName} (rowid, vector) SELECT rowid, vector FROM vec_chunks WHERE rowid = ?`,
-                    bind: [id]
-                });
-            }
-        }
-        this.db.exec('COMMIT;');
-    } catch (e) {
-        this.db.exec('ROLLBACK;');
-        throw e;
-    }
-}
-
 Comlink.expose(new DatabaseWorker());

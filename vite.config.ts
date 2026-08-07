@@ -25,11 +25,16 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     host: 'localhost',
-    headers: crossOriginHeaders
     fs: {
       // Allow serving models from the /public/models/ directory
       allow: ['..']
     }
+  },
+  preview: {
+    headers: crossOriginHeaders
+  },
+  worker: {
+    format: 'es'
   },
   build: {
     target: 'esnext',
@@ -38,10 +43,20 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('react') || id.includes('framer-motion') || id.includes('gsap')) return 'react-vendor';
-          if (id.includes('sqlite-wasm-vec')) return 'sqlite-vendor';
-          if (id.includes('@huggingface')) return 'onnx-vendor';
-          if (id.includes('@wllama')) return 'wllama-vendor';
+          if (id.includes('node_modules')) {
+            // Priority 1: UI Core
+            if (id.includes('react') || id.includes('framer-motion') || id.includes('gsap')) {
+              return 'vendor-react';
+            }
+            // Priority 2: Intelligence Specialist chunks
+            if (id.includes('sqlite-wasm-vec')) return 'vendor-sqlite';
+            if (id.includes('@huggingface')) return 'vendor-onnx';
+            if (id.includes('@wllama')) return 'vendor-wllama';
+
+            // FIX: Deterministic fallback for all other dependencies
+            // This prevents 'bundle bloat' in the main index chunk.
+            return 'vendor-core';
+          }
         }
       }
     }
@@ -56,18 +71,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectManifest: {
         maximumFileSizeToCacheInBytes: 260000000,
-        globIgnores: ['**/*.gguf']
+        globIgnores: ['**/*.gguf'] // Prevent redundant caching of 400MB models
       }
     }),
   ],
-  assetsInclude: ['**/*.wasm', '**/*.json', '**/*.onnx'],
-  server: {
-
-  },
-  preview: {
-    headers: crossOriginHeaders
-  },
-  worker: {
-    format: 'es'
-  },
+  // FIX: Standardized binary asset serving for August 2026 compliance
+  assetsInclude: ['**/*.wasm', '**/*.json', '**/*.onnx']
 });

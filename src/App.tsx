@@ -24,7 +24,6 @@ import { useSovereignStore } from "@/store";
 import A2HSOverlay from "@/components/A2HSOverlay";
 
 const PanelGroup = ResizablePanelGroup as any;
-
 export default function App() {
   const { targetModel, isBooting, engineReady, setEngineState, borderStyle, bgVariant, setUIPreferences } = useSovereignStore();
 
@@ -37,29 +36,28 @@ export default function App() {
   const [globalStatus, setGlobalStatus] = useState<string | null>(null);
   const [isStandalone, setIsStandalone] = useState(true);
   const [isIOS, setIsIOS] = useState(false);
-
   const chatPanelRef = useRef<HTMLDivElement>(null);
   const bootLockRef = useRef(false);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    // Detect iOS via user agent to prevent locking out standard browsers
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-    const isPWA = window.matchMedia('(display-mode: standalone)').matches;
 
-    if (isIOS) {
-      setIsStandalone(isPWA);
-    } else {
-      setIsStandalone(true); // Always allow desktop, Windows, Android, and macOS
-    }
+  // STANDALONE CHECK (A2HS Enforcement with iOS Detection)
+  useEffect(() => {
+    const checkStandalone = () => {
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      setIsIOS(ios);
+      const isPWA = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+      setIsStandalone(!!isPWA);
+    };
+    checkStandalone();
   }, []);
 
-  // BOOT SEQUENCE
+  // BOOT SEQUENCE (Dynamic Model Router Integration with iOS-only standalone guard)
   useEffect(() => {
-    if (!targetModel || bootLockRef.current || !isStandalone) return;
+    if (!targetModel || bootLockRef.current) return;
+    if (isIOS && !isStandalone) return; // Only block boot on iOS devices that are outside of standalone PWA mode
     bootLockRef.current = true;
 
     setBootError(null);
-    // FIX: Removed duplicate state call to prevent main-thread stutter
     setEngineState(true, false);
 
     SovereignBootloader.initiateBootSequence((progress, log) => {
@@ -75,7 +73,7 @@ export default function App() {
         setBootError(`Initialization Failed: ${err.message || String(err)}`);
         bootLockRef.current = false;
       });
-  }, [targetModel, setEngineState, isStandalone]);
+  }, [targetModel, setEngineState, isStandalone, isIOS]);
 
   // UI ANIMATIONS
   useEffect(() => {
@@ -218,6 +216,7 @@ export default function App() {
     <TooltipProvider>
       <AssistantRuntimeProvider runtime={runtime}>
         <div className={`relative flex w-full bg-zinc-950 text-white selection:bg-violet-500/30 ${scrollMode === "container" ? "h-[100dvh] overflow-hidden" : "min-h-[100dvh]"}`}>
+          {isIOS && !isStandalone && <A2HSOverlay />}
 
           {!isStandalone && isIOS && <A2HSOverlay />}
 

@@ -1,3 +1,4 @@
+// src/workers/worker-client.ts
 import * as Comlink from 'comlink';
 
 export interface DBWorker {
@@ -36,23 +37,26 @@ export interface LedgerWorker {
     runRecursiveHousekeeping(vectors: { id: number, vector: number[] }[]): Promise<{ id: number, metadata: any }[]>;
 }
 
-// Instantiate Web Workers
+// 1. PERSISTENT WORKERS (Keep as const)
 const dbWorkerInstance = new Worker(new URL('./db.worker.ts', import.meta.url), { type: 'module' });
-const embedWorkerInstance = new Worker(new URL('./embedding.worker.ts', import.meta.url), { type: 'module' });
-const rerankWorkerInstance = new Worker(new URL('./rerank.worker.ts', import.meta.url), { type: 'module' });
-const networkWorkerInstance = new Worker(new URL('./network.worker.ts', import.meta.url), { type: 'module' });
 const inferenceWorkerInstance = new Worker(new URL('./inference.worker.ts', import.meta.url), { type: 'module' });
-const librarianWorkerInstance = new Worker(new URL('./librarian.worker.ts', import.meta.url), { type: 'module' });
-const ledgerWorkerInstance = new Worker(new URL('./ledger.worker.ts', import.meta.url), { type: 'module' });
 
-// Wrap with Comlink
+// 2. VOLATILE WORKERS (Change to let to allow GC reassignment)
+let embedWorkerInstance: Worker | null = new Worker(new URL('./embedding.worker.ts', import.meta.url), { type: 'module' });
+let rerankWorkerInstance: Worker | null = new Worker(new URL('./rerank.worker.ts', import.meta.url), { type: 'module' });
+let networkWorkerInstance: Worker | null = new Worker(new URL('./network.worker.ts', import.meta.url), { type: 'module' });
+let librarianWorkerInstance: Worker | null = new Worker(new URL('./librarian.worker.ts', import.meta.url), { type: 'module' });
+let ledgerWorkerInstance: Worker | null = new Worker(new URL('./ledger.worker.ts', import.meta.url), { type: 'module' });
+
+// 3. COMLINK WRAPPING (Cast volatile workers as Worker to satisfy Comlink types)
 export const dbWorker = Comlink.wrap<DBWorker>(dbWorkerInstance);
-export const embedWorker = Comlink.wrap<EmbedWorker>(embedWorkerInstance);
-export const rerankWorker = Comlink.wrap<RerankWorker>(rerankWorkerInstance);
-export const networkWorker = Comlink.wrap<NetworkWorker>(networkWorkerInstance);
 export const inferenceWorker = Comlink.wrap<InferenceWorker>(inferenceWorkerInstance);
-export const librarianWorker = Comlink.wrap<LibrarianWorker>(librarianWorkerInstance);
-export const ledgerWorker = Comlink.wrap<LedgerWorker>(ledgerWorkerInstance);
+
+export const embedWorker = Comlink.wrap<EmbedWorker>(embedWorkerInstance as Worker);
+export const rerankWorker = Comlink.wrap<RerankWorker>(rerankWorkerInstance as Worker);
+export const networkWorker = Comlink.wrap<NetworkWorker>(networkWorkerInstance as Worker);
+export const librarianWorker = Comlink.wrap<LibrarianWorker>(librarianWorkerInstance as Worker);
+export const ledgerWorker = Comlink.wrap<LedgerWorker>(ledgerWorkerInstance as Worker);
 
 /**
  * CRITICAL MEMORY GOVERNANCE:
@@ -77,13 +81,12 @@ export async function killMemoryWorkers(): Promise<void> {
         }
     }
 
-    // Nullify singleton instances to allow Garbage Collection to reclaim memory pages
-    (embedWorkerInstance as any) = null;
-    (rerankWorkerInstance as any) = null;
-    (networkWorkerInstance as any) = null;
-    (librarianWorkerInstance as any) = null;
-    (ledgerWorkerInstance as any) = null;
+    // 4. CLEAN REASSIGNMENT (No 'as any' required, satisfying the bundler)
+    embedWorkerInstance = null;
+    rerankWorkerInstance = null;
+    networkWorkerInstance = null;
+    librarianWorkerInstance = null;
+    ledgerWorkerInstance = null;
 
-    // Signal completion to orchestrator to safely proceed with WebGPU model mounting
     console.log("🧹 [Memory Governance] RAM Valley created. Proceeding to Model Boot.");
 }

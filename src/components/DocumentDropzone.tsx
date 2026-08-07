@@ -101,7 +101,7 @@ const DocumentDropzone: React.FC<DocumentDropzoneProps> = ({ onProgress }) => {
     };
 
     const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
+        const files = e.target.files ?;
         if (files && files.length > 0) {
             const file = files[0];
             if (file) {
