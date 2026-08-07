@@ -63,7 +63,7 @@ class LibrarianWorker {
             for (let i = 0; i < vectors.length; i++) {
                 const clusterIdx = assignments[i];
                 counts[clusterIdx]++;
-                for (let d = 0; k < 384; d++) {
+                for (let d = 0; d < 384; d++) {
                     newCentroids[clusterIdx][d] += vectors[i].vector[d];
                 }
             }

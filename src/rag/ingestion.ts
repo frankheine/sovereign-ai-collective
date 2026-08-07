@@ -56,7 +56,7 @@ export async function contextualChunkingPipeline(
     const splitRecursive = (text: string, currentSeparators: string[]): string[] => {
         if (text.length <= chunkSize || currentSeparators.length === 0) return [text];
 
-        const sep = currentSeparators;
+        const sep = currentSeparators[0];
         const parts = text.split(sep);
         const result: string[] = [];
         let currentChunk = "";
