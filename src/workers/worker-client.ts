@@ -54,12 +54,36 @@ export const inferenceWorker = Comlink.wrap<InferenceWorker>(inferenceWorkerInst
 export const librarianWorker = Comlink.wrap<LibrarianWorker>(librarianWorkerInstance);
 export const ledgerWorker = Comlink.wrap<LedgerWorker>(ledgerWorkerInstance);
 
-// Utility to kill workers if RAM needs to be flushed for the Native Inference Engine
-export function killMemoryWorkers() {
-    console.log("[Worker Client] 🧹 Terminating background workers to free RAM...");
-    embedWorkerInstance.terminate();
-    rerankWorkerInstance.terminate();
-    networkWorkerInstance.terminate();
-    librarianWorkerInstance.terminate();
-    ledgerWorkerInstance.terminate();
+/**
+ * CRITICAL MEMORY GOVERNANCE:
+ * Terminates all semantic and background specialists to create a "RAM valley."
+ * Mandatory on iOS to accommodate the GGUF model and KV-cache within the 1.8GB hard cap.
+ */
+export async function killMemoryWorkers(): Promise<void> {
+    console.log("🧹 [Memory Governance] Initiating RAM Valley Flush...");
+
+    const workersToKill = [
+        { name: 'Embedding', instance: embedWorkerInstance },
+        { name: 'Reranker', instance: rerankWorkerInstance },
+        { name: 'Network', instance: networkWorkerInstance },
+        { name: 'Librarian', instance: librarianWorkerInstance },
+        { name: 'Ledger', instance: ledgerWorkerInstance }
+    ];
+
+    for (const worker of workersToKill) {
+        if (worker.instance) {
+            console.log(`🧹 [Memory Governance] Terminating ${worker.name} Specialist...`);
+            worker.instance.terminate();
+        }
+    }
+
+    // Nullify singleton instances to allow Garbage Collection to reclaim memory pages
+    (embedWorkerInstance as any) = null;
+    (rerankWorkerInstance as any) = null;
+    (networkWorkerInstance as any) = null;
+    (librarianWorkerInstance as any) = null;
+    (ledgerWorkerInstance as any) = null;
+
+    // Signal completion to orchestrator to safely proceed with WebGPU model mounting
+    console.log("🧹 [Memory Governance] RAM Valley created. Proceeding to Model Boot.");
 }

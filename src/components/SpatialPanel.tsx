@@ -1,68 +1,46 @@
-import React, { useRef } from 'react';
-import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import React, { useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
+import gsap from "gsap";
 
 interface SpatialPanelProps {
   children: React.ReactNode;
   className?: string;
-  depth?: number; // How far it pops off the background
+  depth?: number;
 }
 
-export function SpatialPanel({ children, className = "", depth = 20 }: SpatialPanelProps) {
-  const ref = useRef<HTMLDivElement>(null);
+export const SpatialPanel = ({ children, className, depth = 100 }: SpatialPanelProps) => {
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
+  useEffect(() => {
+    if (!panelRef.current) return;
 
-  // Springs for smooth, physics-based interpolation
-  const mouseXSpring = useSpring(x, { stiffness: 150, damping: 20 });
-  const mouseYSpring = useSpring(y, { stiffness: 150, damping: 20 });
-
-  // Map mouse movement to subtle 3D rotations (max +/- 3 degrees)
-  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["3deg", "-3deg"]);
-  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-3deg", "3deg"]);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-    
-    // Normalize mouse position relative to center of the panel (-0.5 to 0.5)
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    
-    const xPct = mouseX / width - 0.5;
-    const yPct = mouseY / height - 0.5;
-    
-    x.set(xPct);
-    y.set(yPct);
-  };
-
-  const handleMouseLeave = () => {
-    // Return to center
-    x.set(0);
-    y.set(0);
-  };
+    // LUXURY ANIMATION: Entrance along the Z-axis with blur decay
+    gsap.fromTo(panelRef.current,
+      {
+        z: -depth,
+        opacity: 0,
+        filter: "blur(20px)"
+      },
+      {
+        z: 0,
+        opacity: 1,
+        filter: "blur(0px)",
+        duration: 1.4,
+        ease: "expo.out",
+        delay: 0.2
+      }
+    );
+  }, [depth]);
 
   return (
-    <div 
-      className="relative perspective-1000 w-full h-full"
-      style={{ perspective: "1200px" }}
+    <div
+      ref={panelRef}
+      className={cn("spatial-stage relative perspective-1000", className)}
+      style={{ transformStyle: 'preserve-3d' }}
     >
-      <motion.div
-        ref={ref}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        style={{
-          rotateX,
-          rotateY,
-          transformStyle: "preserve-3d",
-          z: depth
-        }}
-        className={`w-full h-full ${className}`}
-      >
+      <div className="glass-panel transform-gpu transition-transform hover:translateZ(20px)">
         {children}
-      </motion.div>
+      </div>
     </div>
   );
-}
+};

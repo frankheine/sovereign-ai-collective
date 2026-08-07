@@ -11,9 +11,24 @@ const crossOriginHeaders = {
 };
 
 export default defineConfig({
+  optimizeDeps: {
+    exclude: ['@huggingface/transformers', 'sqlite-wasm-vec', '@sqlite.org/sqlite-wasm', '@wllama/wllama', 'onnxruntime-web'],
+    include: ['comlink', 'localforage']
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src")
+    }
+  },
+  server: {
+    headers: crossOriginHeaders,
+    port: 5173,
+    strictPort: true,
+    host: 'localhost',
+    headers: crossOriginHeaders
+    fs: {
+      // Allow serving models from the /public/models/ directory
+      allow: ['..']
     }
   },
   build: {
@@ -47,10 +62,7 @@ export default defineConfig({
   ],
   assetsInclude: ['**/*.wasm', '**/*.json', '**/*.onnx'],
   server: {
-    port: 5173,
-    strictPort: true,
-    host: 'localhost',
-    headers: crossOriginHeaders
+
   },
   preview: {
     headers: crossOriginHeaders
@@ -58,8 +70,4 @@ export default defineConfig({
   worker: {
     format: 'es'
   },
-  optimizeDeps: {
-    exclude: ['@huggingface/transformers', 'sqlite-wasm-vec', '@wllama/wllama', 'onnxruntime-web'],
-    include: ['comlink', 'localforage']
-  }
 });

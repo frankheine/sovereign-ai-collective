@@ -1,195 +1,165 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FileUp, File, CheckCircle2, AlertCircle } from 'lucide-react';
-// CRITICAL FIX: Import directly from the Comlink mesh, bypassing the deleted pipeline.ts
-import { embedWorker, dbWorker } from '../workers/worker-client';
+import React, { useState, useRef } from "react";
+import { Upload, FileText, File as FileIcon, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import * as pdfjs from "pdfjs-dist";
+import mammoth from "mammoth";
+import { contextualChunkingPipeline } from "@/rag/ingestion";
+import { embedWorker, dbWorker } from "@/workers/worker-client";
+
+// Initialize PDF.js worker - Required for August 2026 WASM compliance
+// Ensure pdf.worker.min.mjs exists in your /public/wasm/ directory
+pdfjs.GlobalWorkerOptions.workerSrc = `/wasm/pdf.worker.min.mjs`;
 
 interface DocumentDropzoneProps {
     onProgress: (status: string) => void;
 }
 
-export const DocumentDropzone: React.FC<DocumentDropzoneProps> = ({ onProgress }) => {
+const DocumentDropzone: React.FC<DocumentDropzoneProps> = ({ onProgress }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-    const dragCounter = useRef(0);
-
-    const handleDragEnter = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current++;
-        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-            setIsDragging(true);
-        }
-    }, []);
-
-    const handleDragLeave = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current--;
-        if (dragCounter.current === 0) {
-            setIsDragging(false);
-        }
-    }, []);
-
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-    }, []);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const processFile = async (file: File) => {
-        const isText = file.name.endsWith('.txt') || file.name.endsWith('.md');
-        const isPDF = file.name.endsWith('.pdf');
-        const isDocx = file.name.endsWith('.docx');
-
-        if (!isText && !isPDF && !isDocx) {
-            onProgress(`Error: Unsupported file type ${file.name}. Supported: .txt, .md, .pdf, .docx.`);
-            setUploadStatus('error');
-            setTimeout(() => setUploadStatus('idle'), 3000);
-            return;
-        }
-
         setUploadStatus('processing');
-        onProgress(`Processing document: ${file.name}`);
+        onProgress(`📂 Accessing ${file.name}...`);
 
         try {
             let text = "";
-            if (isText) {
-                text = await file.text();
-            } else if (isDocx) {
-                onProgress(`Extracting DOCX contents...`);
-                // Dynamic import to protect the 1.8GB iOS RAM budget
-                const mammoth = await import('mammoth');
+            const extension = file.name.split('.').pop()?.toLowerCase();
+
+            // 1. EXTRACTION LAYER: 100% Local Air-Gapped Parsing
+            if (extension === 'pdf') {
+                onProgress("📄 Extracting semantic layer from PDF...");
                 const arrayBuffer = await file.arrayBuffer();
-                const result = await mammoth.extractRawText({ arrayBuffer });
-                text = result.value;
-            } else if (isPDF) {
-                onProgress(`Extracting PDF contents (RAM-conscious mode)...`);
-                // Dynamic import to protect the 1.8GB iOS RAM budget
-                const pdfjsLib = await import('pdfjs-dist');
-                // CRITICAL FIX: Bundle worker locally to maintain 100% air-gapped Zero-Trust CSP
-                pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+                let fullText = "";
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const content = await page.getTextContent();
-                    text += content.items.map((item: any) => item.str).join(' ') + "\n";
+                    fullText += content.items.map((item: any) => item.str).join(" ") + "\n";
                 }
+                text = fullText;
+            } else if (extension === 'docx') {
+                onProgress("📝 Decoding Word XML hierarchy...");
+                const arrayBuffer = await file.arrayBuffer();
+                const result = await mammoth.extractRawText({ arrayBuffer });
+                text = result.value;
+            } else {
+                // Fallback for .md and .txt
+                text = await file.text();
             }
 
-            // Extremely basic chunking for phase 1
-            const chunkSize = 1000;
-            const chunks: string[] = [];
-            for (let i = 0; i < text.length; i += chunkSize) {
-                chunks.push(text.slice(i, i + chunkSize));
-            }
+            if (!text.trim()) throw new Error("File contains no extractable text.");
 
-            onProgress(`Chunked into ${chunks.length} segments. Generating embeddings...`);
+            // 2. CHUNKING LAYER: Recursive Semantic Fragmentation
+            onProgress("✂️ Decomposing intelligence into semantic chunks...");
+            const chunks = await contextualChunkingPipeline(text, {
+                source: file.name,
+                type: 'vault_ingestion',
+                timestamp: Date.now()
+            });
+
+            // 3. PERSISTENCE MESH: Embedding & Storage
+            onProgress(`🧬 Seeding vault with ${chunks.length} memory nodes...`);
 
             for (let i = 0; i < chunks.length; i++) {
                 const chunk = chunks[i];
-                onProgress(`Embedding chunk ${i + 1}/${chunks.length}...`);
+                const progressPct = Math.round(((i + 1) / chunks.length) * 100);
+                onProgress(`🧬 Vault Ingestion: ${progressPct}%`);
 
-                // 1. Generate embedding directly via Comlink
-                const embedding = await embedWorker.embed(chunk);
+                // Parallel Task: Embed via Transformers.js (CPU Thread)
+                const embedding = await embedWorker.embed(chunk.text);
 
-                // 2. Insert into SQLite directly via Comlink
-                await dbWorker.insertChunk(chunk, embedding, {
-                    source: file.name,
-                    type: 'document',
-                    chunkIndex: i
-                });
+                // Persistent Storage: Commit to SQLite OPFS Vault
+                await dbWorker.insertChunk(chunk.text, embedding, chunk.metadata);
             }
 
             setUploadStatus('success');
-            onProgress(`Successfully indexed ${file.name} (${chunks.length} chunks)`);
-            setTimeout(() => setUploadStatus('idle'), 3000);
+            onProgress("✅ Intelligence successfully secured in Sovereign Vault.");
+
+            // Cleanup UI state after delay
+            setTimeout(() => {
+                setUploadStatus('idle');
+                onProgress("");
+            }, 3000);
         } catch (error: any) {
-            console.error("Dropzone Error:", error);
+            console.error("[Vault Ingestion Failed]:", error);
             setUploadStatus('error');
-            onProgress(`Failed to process ${file.name}: ${error.message}`);
-            setTimeout(() => setUploadStatus('idle'), 4000);
+            onProgress(`❌ Security Breach: ${error.message || String(error)}`);
+        }
+    }
+    const onDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            const file = files[0];
+            if (file) {
+                processFile(file);
+            }
         }
     };
 
-    const handleDrop = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-        dragCounter.current = 0;
-
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const file = e.dataTransfer.files[0];
-            processFile(file);
+    const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+            const file = files[0];
+            if (file) {
+                processFile(file);
+            }
         }
-    }, []);
-
-    // Global drag listeners could be added here, but attaching to a full-screen div is safer
-    useEffect(() => {
-        const handleWindowDragOver = (e: DragEvent) => e.preventDefault();
-        const handleWindowDrop = (e: DragEvent) => e.preventDefault();
-
-        window.addEventListener('dragover', handleWindowDragOver);
-        window.addEventListener('drop', handleWindowDrop);
-
-        return () => {
-            window.removeEventListener('dragover', handleWindowDragOver);
-            window.removeEventListener('drop', handleWindowDrop);
-        };
-    }, []);
+    };
 
     return (
-        <>
-            <div
-                className="absolute inset-0 z-40 pointer-events-auto"
-                onDragEnter={handleDragEnter}
-                onDragLeave={handleDragLeave}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                style={{ pointerEvents: isDragging ? 'auto' : 'none' }}
+        <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={onDrop}
+            onClick={() => !isDragging && fileInputRef.current?.click()}
+            className={cn(
+                "relative group cursor-pointer transition-all duration-500",
+                "border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center gap-4",
+                "bg-black/20 backdrop-blur-xl border-white/10",
+                isDragging && "border-violet-500 bg-violet-500/10 scale-[1.02]",
+                uploadStatus === 'processing' && "pointer-events-none opacity-80 shadow-[0_0_50px_rgba(139,92,246,0.2)]"
+            )}
+        >
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={onFileSelect}
+                className="hidden"
+                accept=".txt,.md,.pdf,.docx"
             />
 
-            <AnimatePresence>
-                {isDragging && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 1.05 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none"
-                    >
-                        <div className="w-96 h-64 border-2 border-dashed border-violet-500/50 rounded-3xl bg-violet-500/10 flex flex-col items-center justify-center gap-4 text-violet-300 shadow-[0_0_50px_rgba(139,92,246,0.2)]">
-                            <FileUp className="w-16 h-16 animate-bounce" />
-                            <div className="text-xl font-mono tracking-widest font-medium">DROP TO INDEX</div>
-                            <div className="text-xs opacity-60">Local Chunking & Embedding via Transformers.js</div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <div className={cn(
+                "w-20 h-20 rounded-3xl flex items-center justify-center border transition-all duration-500",
+                "bg-white/5 border-white/10 group-hover:border-white/20",
+                uploadStatus === 'processing' && "border-violet-500/50 shadow-inner",
+                uploadStatus === 'success' && "border-emerald-500/50 bg-emerald-500/10",
+                uploadStatus === 'error' && "border-red-500/50 bg-red-500/10"
+            )}>
+                {uploadStatus === 'idle' && <Upload className="w-10 h-10 text-white/50 group-hover:text-white group-hover:scale-110 transition-all" />}
+                {uploadStatus === 'processing' && <Loader2 className="w-10 h-10 text-violet-400 animate-spin" />}
+                {uploadStatus === 'success' && <CheckCircle2 className="w-10 h-10 text-emerald-400" />}
+                {uploadStatus === 'error' && <AlertCircle className="w-10 h-10 text-red-400" />}
+            </div>
 
-            <AnimatePresence>
-                {uploadStatus !== 'idle' && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="absolute bottom-8 right-8 z-50"
-                    >
-                        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/80 backdrop-blur-xl border border-white/10 shadow-2xl">
-                            {uploadStatus === 'processing' && <File className="w-5 h-5 text-blue-400 animate-pulse" />}
-                            {uploadStatus === 'success' && <CheckCircle2 className="w-5 h-5 text-green-400" />}
-                            {uploadStatus === 'error' && <AlertCircle className="w-5 h-5 text-red-400" />}
+            <div className="text-center space-y-1">
+                <h3 className="text-xl font-bold tracking-tight text-white/90">
+                    {uploadStatus === 'processing' ? 'Encrypting Intelligence...' : 'Ingest External Assets'}
+                </h3>
+                <p className="text-sm text-white/40 max-w-[200px]">
+                    Drop PDF, Word, or Markdown for 100% Offline Recall
+                </p>
+            </div>
 
-                            <div className="flex flex-col">
-                                <span className="text-xs font-medium text-white/90">
-                                    {uploadStatus === 'processing' ? 'Processing Document' :
-                                        uploadStatus === 'success' ? 'Indexing Complete' : 'Indexing Failed'}
-                                </span>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </>
+            {uploadStatus === 'processing' && (
+                <div className="absolute inset-x-12 bottom-6 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 animate-pulse shadow-[0_0_10px_rgba(139,92,246,1)]" style={{ width: '100%' }} />
+                </div>
+            )}
+        </div>
     );
 };
 

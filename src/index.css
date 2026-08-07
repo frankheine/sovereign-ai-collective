@@ -230,3 +230,40 @@
   opacity: 0.04;
   mix-blend-mode: overlay;
 }
+
+/* LUXURY SPATIAL UTILITIES - AUGUST 2026 */
+@layer utilities {
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+
+  .glass-panel {
+    background: linear-gradient(135deg, rgba(15, 15, 20, 0.7) 0%, rgba(5, 5, 10, 0.5) 100%);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: translateZ(0);
+    will-change: transform, opacity;
+  }
+
+  .procedural-mesh-bg {
+    background-color: #02040a;
+    background-image:
+      radial-gradient(at 20% 30%, rgba(139, 92, 246, 0.15) 0px, transparent 60%),
+      radial-gradient(at 80% 80%, rgba(30, 58, 138, 0.2) 0px, transparent 60%),
+      radial-gradient(at 50% 10%, rgba(217, 70, 239, 0.1) 0px, transparent 50%);
+    background-size: 200% 200%;
+    animation: proceduralPulse 15s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes proceduralPulse {
+  0% {
+    background-position: 0% 0%;
+  }
+
+  100% {
+    background-position: 100% 100%;
+  }
+}

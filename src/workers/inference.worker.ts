@@ -34,6 +34,7 @@ class InferenceWorker {
             'default': wasmPath
         });
 
+
         // Load Model with strict memory constraints 
         // wllama natively loads from an OPFS File handle to bypass browser RAM ceilings
         const root = await navigator.storage.getDirectory();

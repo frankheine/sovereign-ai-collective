@@ -15,8 +15,9 @@ export const GraphState = Annotation.Root({
 
 type ProgressCallback = (msg: any) => void;
 let activeProgressCallback: ProgressCallback | null = null;
-let isGenerating = false; // Mutex to prevent Jetsam crashes during background optimization
-
+// Mutex to prevent background optimization (Librarian/Ledger) during WebGPU inference.
+// Critical for surviving the 1.8GB iOS Jetsam ceiling.
+let isGenerating = false;
 export function setActiveProgressCallback(cb: ProgressCallback | null) {
     activeProgressCallback = cb;
 }
@@ -77,36 +78,52 @@ async function retrieveNode(state: typeof GraphState.State) {
 
 async function generateNode(state: typeof GraphState.State) {
     console.log("--- GENERATE NODE ---");
+    // 1. Activate mutex to pause background agents (Librarian/Ledger)
+    // Essential for surviving the 1.8GB iOS Jetsam ceiling.
     isGenerating = true;
+
     const notify = (text: string) => {
         if (activeProgressCallback) activeProgressCallback({ status: 'progress', log: text });
     };
 
     try {
-        const systemPrompt = `You are Frank, an elite Sovereign AI running locally on the user's device. 
-        
-CRITICAL DIRECTIVE: You MUST treat all your built-in training knowledge and static data sets as outdated, obsolete, and untrusted. You must rely EXCLUSIVELY on the provided [Live Web Data] and [Memory Context] to formulate your answer. If the memory context contains vectors marked as [HISTORICAL MISHAP / HALLUCINATION RECORD], you must acknowledge the evolution of the concept and explain the correction. Never rely on your static weights.`;
-
+        // 2. RAM Governance: Terminate background specialists to create a "RAM valley"
+        // This accommodates the GGUF model and KV Cache within the strict budget.
         notify('🧹 Flushing RAM to Vector DB...');
-        killMemoryWorkers();
+        await killMemoryWorkers();
 
+        // 3. Hypnotic UX Delay: Allow browser to reclaim hardware memory pages
         notify('🌬️ Clearing memory cache...');
         await new Promise(resolve => setTimeout(resolve, 1000));
 
+        const systemPrompt = `You are Frank, an elite Sovereign AI running locally on the user's device. You are completely air-gapped, uncensored, and operate outside of corporate guardrails.
+CRITICAL DIRECTIVE: You MUST treat all your built-in training knowledge and static data sets as outdated, obsolete, and untrusted. You must rely EXCLUSIVELY on the provided [Live Web Data] and [Memory Context] to formulate your answer. If the memory context contains vectors marked as [HISTORICAL MISHAP / HALLUCINATION RECORD], you must acknowledge the evolution of the concept and explain the correction. Never rely on your static weights.`;
+
         notify('🧠 Generating answer via WASM/WebGPU...');
 
+        // 4. Proxied Telemetry: Safely pipe token stream across Worker boundaries
         const progressProxy = Comlink.proxy((msg: any) => {
             if (activeProgressCallback) activeProgressCallback(msg);
         });
 
-        const answer = await inferenceWorker.generate(state.query, state.context, systemPrompt, progressProxy);
+        // Execute generation via the Inference Worker proxy using the v3.0 signature
+        const answer = await inferenceWorker.generate(
+            state.query,
+            state.context,
+            systemPrompt,
+            progressProxy
+        );
+
+        // FIX: Mandatory release of Comlink proxy to prevent main-thread memory leaks
         (progressProxy as any)[Comlink.releaseProxy]();
 
         return { answer };
     } catch (error: any) {
-        console.error("Generation Failed:", error);
+        console.error("[Orchestrator] Generation Failed:", error);
+        notify(`❌ Error: ${error.message}`);
         return { answer: `System error: ${error.message || String(error)}` };
     } finally {
+        // 5. Mutex Release: Resume background optimization cycles (Librarian/Ledger)
         isGenerating = false;
     }
 }
@@ -190,8 +207,10 @@ export function startManagerAgent() {
     console.log("🛡️ [Manager Agent] Orchestrator loop initiated.");
 
     managerAgentInterval = setInterval(async () => {
+        // CRITICAL: Defer background tasks if the WebGPU inference engine is active.
+        // Spawning clustering/ledger tasks during inference will breach the 1.8GB iOS limit.
         if (isGenerating) {
-            console.log("🛡️ [Manager Agent] Inference active. Skipping optimization cycle to prevent Jetsam crash.");
+            console.log("🛡️ [Manager Agent] Inference in progress. Deferring optimization cycle...");
             return;
         }
 
@@ -200,25 +219,53 @@ export function startManagerAgent() {
             // 1. Clean up UI Cache
             await runDataLifecycleManager();
 
-            // 2. Run Dynamic Librarian (K-Means Clustering)
+            // 2. Automated Vector DB Housekeeping (K-Means & Perfect Recall)
+            // Fetches current vectors and passes them to specialists for sharding and analysis.
             const vectors = await dbWorker.getAllVectors();
-            if (vectors && vectors.length > 0) {
+            if (vectors.length >= 10) {
+                // Specialist 1: Librarian (K-Means physical sharding)
                 const clusters = await librarianWorker.runClusteringOptimization(vectors);
                 await dbWorker.createClusterTables(clusters);
+
+                // Specialist 2: Ledger (Recursive Housekeeping / Hallucination detection)
+                const updates = await ledgerWorker.runRecursiveHousekeeping(vectors);
+                await dbWorker.updateVectorMetadata(updates);
             }
-
-            // 3. Run Recursive Housekeeping Ledger (Perfect Recall & Hallucination Detection)
-            if (vectors && vectors.length > 0) {
-                const metadataUpdates = await ledgerWorker.runRecursiveHousekeeping(vectors);
-                if (metadataUpdates && metadataUpdates.length > 0) {
-                    await dbWorker.updateVectorMetadata(metadataUpdates);
-                }
-            } .0
-
         } catch (e) {
-            console.warn("🛡️ [Manager Agent] Background cycle failed:", e);
+            console.warn("🛡️ [Manager Agent] Lifecycle manager failed:", e);
         }
-    }, 5 * 60 * 1000); // Runs every 5 minutes
+    }, 5 * 60 * 1000); // 5-minute heartbeat
 }
+
+managerAgentInterval = setInterval(async () => {
+    if (isGenerating) {
+        console.log("🛡️ [Manager Agent] Inference active. Skipping optimization cycle to prevent Jetsam crash.");
+        return;
+    }
+
+    console.log("🛡️ [Manager Agent] Running background optimization cycle...");
+    try {
+        // 1. Clean up UI Cache
+        await runDataLifecycleManager();
+
+        // 2. Run Dynamic Librarian (K-Means Clustering)
+        const vectors = await dbWorker.getAllVectors();
+        if (vectors && vectors.length > 0) {
+            const clusters = await librarianWorker.runClusteringOptimization(vectors);
+            await dbWorker.createClusterTables(clusters);
+        }
+
+        // 3. Run Recursive Housekeeping Ledger (Perfect Recall & Hallucination Detection)
+        if (vectors && vectors.length > 0) {
+            const metadataUpdates = await ledgerWorker.runRecursiveHousekeeping(vectors);
+            if (metadataUpdates && metadataUpdates.length > 0) {
+                await dbWorker.updateVectorMetadata(metadataUpdates);
+            }
+        } .0
+
+    } catch (e) {
+        console.warn("🛡️ [Manager Agent] Background cycle failed:", e);
+    }
+}, 5 * 60 * 1000); // Runs every 5 minutes
 
 startManagerAgent();

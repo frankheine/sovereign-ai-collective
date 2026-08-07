@@ -5,23 +5,13 @@ import { pipeline, env } from '@huggingface/transformers';
 const isProd = import.meta.env.PROD;
 const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev/';
 
-if (isProd) {
-    // 🌐 VERCEL MODE: Route through Cloudflare Proxy
-    env.allowRemoteModels = true;
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
-    env.remoteHost = PROXY_URL + '/models/';
-    env.backends.onnx.wasm!.wasmPaths = PROXY_URL + '/wasm/';
-} else {
-    // 💻 LOCALHOST MODE: Strict Air-Gap to Hard Drive
-    env.allowRemoteModels = false;
-    env.allowLocalModels = true;
-    env.localModelPath = self.location.origin + '/models/';
-    env.useBrowserCache = false;
-    env.backends.onnx.wasm!.wasmPaths = '/ort/';
-}
-
-// Protect iOS RAM
+// CRITICAL iOS FIX: Multi-threading multiples WASM memory allocation per thread.
+// Spawning >1 thread will instantly breach the 1.8GB iOS Jetsam limit.
+env.allowRemoteModels = false;
+env.allowLocalModels = true;
+env.localModelPath = '/models/';
+env.useBrowserCache = true;
+(env.backends.onnx.wasm as any).wasmPaths = self.location.origin + '/wasm/';
 env.backends.onnx.wasm!.numThreads = 1;
 env.backends.onnx.wasm!.simd = true;
 env.backends.onnx.wasm!.proxy = false;

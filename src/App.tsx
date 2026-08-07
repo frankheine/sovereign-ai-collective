@@ -2,7 +2,8 @@
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import { useLocalRuntime, AssistantRuntimeProvider } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/thread";
-import { ragApp, setActiveProgressCallback } from "@/orchestrator";
+// FIX: Added startManagerAgent to the named imports to resolve the reference error on line 88
+import { ragApp, setActiveProgressCallback, startManagerAgent } from "@/orchestrator";
 import { SovereignBootloader } from "@/workers/custom-loader"; // CRITICAL UPDATE: New Bootloader
 import ModelSelector from "@/components/ModelSelector";
 import StyleSelector from "@/components/StyleSelector";
@@ -40,7 +41,6 @@ export default function App() {
   const chatPanelRef = useRef<HTMLDivElement>(null);
   const bootLockRef = useRef(false);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   useEffect(() => {
     // Detect iOS via user agent to prevent locking out standard browsers
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
@@ -53,15 +53,15 @@ export default function App() {
     }
   }, []);
 
-  // BOOT SEQUENCE (Dynamic Model Router Integration)
+  // BOOT SEQUENCE
   useEffect(() => {
     if (!targetModel || bootLockRef.current || !isStandalone) return;
     bootLockRef.current = true;
 
     setBootError(null);
+    // FIX: Removed duplicate state call to prevent main-thread stutter
     setEngineState(true, false);
 
-    // CRITICAL UPDATE: Connect to the new Comlink-powered Bootloader
     SovereignBootloader.initiateBootSequence((progress, log) => {
       setDownloadLog(log);
       setDownloadPercent(progress);
