@@ -1,11 +1,18 @@
 // src/workers/inference.worker.ts
+
+// SHIM DOCUMENT TO BYPASS THE GLOBAL 'document' REFERENCE ERROR IN ngxson/wllama'S ESM BUNDLE
+if (typeof (self as any).document === 'undefined') {
+    (self as any).document = {
+        currentScript: null
+    } as any;
+}
+
 import * as Comlink from 'comlink';
-import { Wllama } from '@wllama/wllama';
 
 class InferenceWorker {
     private isInitialized = false;
     private modelPath = "";
-    private wllama: Wllama | null = null;
+    private wllama: any = null;
 
     async init(modelPath: string) {
         // If already initialized with the SAME model, do nothing.
@@ -22,6 +29,9 @@ class InferenceWorker {
 
         this.modelPath = modelPath;
 
+        // Dynamically import the @wllama/wllama library so the document shim is guaranteed to be in scope
+        const { Wllama } = await import('@wllama/wllama');
+
         // 🌐 DYNAMIC ROUTING: Cloudflare Worker in Vercel Production, Localhost in Dev
         const isProd = import.meta.env.PROD;
         const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
@@ -29,11 +39,10 @@ class InferenceWorker {
             ? `${PROXY_URL}/wllama/wllama.wasm`
             : `${self.location.origin}/wllama/wllama.wasm`;
 
-        // Initialize Wllama with the dynamically routed WASM binary
+        // Initialize Wllama with the dynamically routed WASM binary (v3.1+ single binary)
         this.wllama = new Wllama({
             'default': wasmPath
         });
-
 
         // Load Model with strict memory constraints 
         // wllama natively loads from an OPFS File handle to bypass browser RAM ceilings
@@ -43,6 +52,7 @@ class InferenceWorker {
         const file = await fileHandle.getFile();
 
         // FIX: Using non-null assertion to satisfy TS compiler after constructor check
+        // loadModel requires an array of files/blobs
         await this.wllama!.loadModel([file], {
             n_ctx: 2048, // Strictly finite context window (The Desk)
         });
@@ -64,15 +74,14 @@ class InferenceWorker {
         let generatedText = "";
 
         try {
-            // Execute WASM inference using the v3.x single-object signature
-            generatedText = await (this.wllama as any).createCompletion({
-                prompt: fullPrompt,
+            // Execute WASM inference using the corrected v3.x signature
+            generatedText = await this.wllama.createCompletion(fullPrompt, {
                 nPredict: 2048,
                 sampling: {
                     temp: 0.3, // Low temperature for RAG precision
                     top_p: 0.9,
                 },
-                onNewToken: (token: number, piece: Uint8Array | string) => {
+                onNewToken: (token: number, piece: Uint8Array | string, currentText: string) => {
                     // Robust piece handling for cross-version compatibility
                     const tokenStr = piece instanceof Uint8Array ? new TextDecoder().decode(piece) : piece;
                     onProgress({ delta: tokenStr });
