@@ -1,10 +1,10 @@
 export default {
-  async fetch(request: Request, env: any) {
+  async fetch(request: Request, env: any): Promise<Response> {
     const ALLOWED_ORIGIN = 'https://sovereign-ai-collective.vercel.app';
     const corsHeaders = { 'Access-Control-Allow-Origin': ALLOWED_ORIGIN };
 
     const url = new URL(request.url);
-    const objectKey = url.pathname.slice(1);
+    let objectKey = url.pathname.slice(1);
 
     // Preflight
     if (request.method === 'OPTIONS') {
@@ -26,23 +26,31 @@ export default {
       });
     }
 
+    // Path Translations
+    // Strip "/models/" prefix if it exists
+    if (objectKey.startsWith('models/')) {
+      objectKey = objectKey.substring(7);
+    }
+    // Strip Hugging Face "resolve/main/" prefix appended by Transformers.js
+    objectKey = objectKey.replace(/resolve\/main\//g, '');
+
     let object;
     try {
       object = await env.MODELS.get(objectKey, {
         range: request.headers,
         onlyIf: request.headers,
       });
-    } catch (e) {
-      return new Response("Error accessing Sovereign Vault", {
+    } catch (e: any) {
+      return new Response(`Sovereign Proxy Exception: ${e.message}`, {
         status: 500,
-        headers: corsHeaders
+        headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
       });
     }
 
     if (object === null) {
-      return new Response(`File not found in Sovereign Vault: ${objectKey}`, {
+      return new Response(`Asset Not Found in Sovereign Vault: ${objectKey}`, {
         status: 404,
-        headers: corsHeaders
+        headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
       });
     }
 
@@ -52,6 +60,7 @@ export default {
     headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
     headers.set('Accept-Ranges', 'bytes');
     headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+    headers.set('Cache-Control', 'public, max-age=31536000');
 
     const status = object.body ? (request.headers.get('range') !== null ? 206 : 200) : 304;
 
