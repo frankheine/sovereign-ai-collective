@@ -1,33 +1,43 @@
 import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
-/**
- * ENVIRONMENT GOVERNANCE:
- * Calibrates Transformers.js for air-gapped execution.
- * Casting to 'any' on wasmPaths is mandatory to bypass August 2026 TS2353 type errors.
- */
-const isProd = import.meta.env.PROD;
-const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev/';
+// AUTOMATIC ENVIRONMENT DETECTION (Localhost vs Vercel Router)
+const isLocal = self.location.hostname === 'localhost' ||
+    self.location.hostname === '127.0.0.1' ||
+    self.location.hostname.endsWith('.local');
 
-if (isProd) {
+const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev/';
+const wasmBase = isLocal ? (self.location.origin + '/wasm/') : (PROXY_URL + 'wasm/');
+
+if (isLocal) {
+    // 💻 LOCALHOST MODE: Air-gapped offline loading from physical public directory
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+    env.localModelPath = self.location.origin + '/models/';
+    env.useBrowserCache = false;
+} else {
+    // 🌐 VERCEL PRODUCTION MODE: Route weight downloads anonymously through Cloudflare Proxy
     env.allowRemoteModels = true;
     env.allowLocalModels = false;
     env.useBrowserCache = true;
     env.remoteHost = PROXY_URL;
     env.remotePathTemplate = '{model}/';
-    // FIX: Type-casted assignment to bypass TS2353 type definition mismatches
-    (env.backends.onnx.wasm as any).wasmPaths = PROXY_URL + 'wasm/';
-} else {
-    env.allowRemoteModels = false;
-    env.allowLocalModels = true;
-    env.localModelPath = self.location.origin + '/models/';
-    env.useBrowserCache = false;
-    // FIX: Standardized local path mapping for Transformers.js v3
-    (env.backends.onnx.wasm as any).wasmPaths = self.location.origin + '/wasm/';
 }
 
-// CRITICAL iOS FIX: Clamp threads to 1 to prevent WASM heap multiplication
+// Explicitly map all WebAssembly asset files to prevent ONNX from phoning home for CDN runtimes
+(env.backends.onnx.wasm as any).wasmPaths = {
+    'ort-wasm.wasm': wasmBase + 'ort-wasm.wasm',
+    'ort-wasm-simd.wasm': wasmBase + 'ort-wasm-simd.wasm',
+    'ort-wasm-threaded.wasm': wasmBase + 'ort-wasm-threaded.wasm',
+    'ort-wasm-simd-threaded.wasm': wasmBase + 'ort-wasm-simd-threaded.wasm',
+    'ort-wasm-simd-threaded.jsep.mjs': wasmBase + 'ort-wasm-simd-threaded.jsep.mjs',
+    'ort-wasm-simd-threaded.jsep.wasm': wasmBase + 'ort-wasm-simd-threaded.jsep.wasm'
+};
+
+// Protect mobile memory ceiling: Clamp active ONNX thread pool size to 1
 env.backends.onnx.wasm!.numThreads = 1;
+env.backends.onnx.wasm!.simd = true;
+env.backends.onnx.wasm!.proxy = false;
 
 /**
  * RERANKER SPECIALIST (COMLINK NATIVE):

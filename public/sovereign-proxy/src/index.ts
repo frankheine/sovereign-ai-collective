@@ -18,6 +18,23 @@ export default {
       });
     }
 
+    // Strict Environment Binding Validation
+    if (!env.MODELS) {
+      return new Response(
+        JSON.stringify({
+          error: "Sovereign Proxy Configuration Error",
+          details: "R2 bucket binding 'MODELS' is undefined. Ensure your Wrangler configuration or Cloudflare Dashboard settings bind 'sovereign-models' to Variable Name 'MODELS'."
+        }),
+        {
+          status: 500,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    }
+
     // Root health check
     if (!objectKey || objectKey === '') {
       return new Response("🛡️ Sovereign R2 Vault is Online and Air-Gapped.", {
@@ -40,18 +57,40 @@ export default {
         range: request.headers,
         onlyIf: request.headers,
       });
-    } catch (e: any) {
-      return new Response(`Sovereign Proxy Exception: ${e.message}`, {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
-      });
+    } catch (err: any) {
+      return new Response(
+        JSON.stringify({
+          error: "Sovereign Proxy Edge Exception",
+          message: err.message || String(err),
+          trace: err.stack || ""
+        }),
+        {
+          status: 500,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
 
+    // Safe Fallback to Prevent 503 Crash on Missing Keys
     if (object === null) {
-      return new Response(`Asset Not Found in Sovereign Vault: ${objectKey}`, {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Asset Not Found in Sovereign Vault",
+          queriedKey: objectKey,
+          originalPath: url.pathname,
+          reconciliation: "Ensure you uploaded the file to R2 inside the directory: " + objectKey.substring(0, objectKey.lastIndexOf('/'))
+        }),
+        {
+          status: 404,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
 
     const headers = new Headers();

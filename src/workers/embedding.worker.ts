@@ -2,38 +2,45 @@ import * as Comlink from 'comlink';
 import { pipeline, env } from '@huggingface/transformers';
 
 const isProd = import.meta.env.PROD;
-const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev';
 
-if (isProd) {
-    // 🌐 VERCEL MODE: Route through Cloudflare Proxy
-    env.allowRemoteModels = true;
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
-    env.remoteHost = PROXY_URL + '/models/';
-    env.backends.onnx.wasm!.wasmPaths = PROXY_URL + '/wasm/';
-} else {
-    // 💻 LOCALHOST MODE: Mapped to local public/wasm directory
+// AUTOMATIC ENVIRONMENT DETECTION (Localhost vs Vercel Router)
+const isLocal = self.location.hostname === 'localhost' ||
+    self.location.hostname === '127.0.0.1' ||
+    self.location.hostname.endsWith('.local');
+
+const PROXY_URL = 'https://sovereign-proxy.datacartel-collective.workers.dev/';
+const wasmBase = isLocal ? (self.location.origin + '/wasm/') : (PROXY_URL + 'wasm/');
+
+if (isLocal) {
+    // 💻 LOCALHOST MODE: Air-gapped offline loading from physical public directory
     env.allowRemoteModels = false;
     env.allowLocalModels = true;
     env.localModelPath = self.location.origin + '/models/';
     env.useBrowserCache = false;
-    env.backends.onnx.wasm!.wasmPaths = self.location.origin + '/wasm/';
+} else {
+    // 🌐 VERCEL PRODUCTION MODE: Route weight downloads anonymously through Cloudflare Proxy
+    env.allowRemoteModels = true;
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+    env.remoteHost = PROXY_URL;
+    env.remotePathTemplate = '{model}/';
 }
 
-// Explicitly map files to prevent ONNX from phoning home for .jsep.wasm weights
-env.backends.onnx.wasm!.wasmPaths = {
-    'ort-wasm.wasm': self.location.origin + '/wasm/ort-wasm.wasm',
-    'ort-wasm-simd.wasm': self.location.origin + '/wasm/ort-wasm-simd.wasm',
-    'ort-wasm-threaded.wasm': self.location.origin + '/wasm/ort-wasm-threaded.wasm',
-    'ort-wasm-simd-threaded.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.wasm',
-    'ort-wasm-simd-threaded.jsep.mjs': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.mjs',
-    'ort-wasm-simd-threaded.jsep.wasm': self.location.origin + '/wasm/ort-wasm-simd-threaded.jsep.wasm'
-} as any;
+// Explicitly map all WebAssembly asset files to prevent ONNX from phoning home for CDN runtimes
+(env.backends.onnx.wasm as any).wasmPaths = {
+    'ort-wasm.wasm': wasmBase + 'ort-wasm.wasm',
+    'ort-wasm-simd.wasm': wasmBase + 'ort-wasm-simd.wasm',
+    'ort-wasm-threaded.wasm': wasmBase + 'ort-wasm-threaded.wasm',
+    'ort-wasm-simd-threaded.wasm': wasmBase + 'ort-wasm-simd-threaded.wasm',
+    'ort-wasm-simd-threaded.jsep.mjs': wasmBase + 'ort-wasm-simd-threaded.jsep.mjs',
+    'ort-wasm-simd-threaded.jsep.wasm': wasmBase + 'ort-wasm-simd-threaded.jsep.wasm'
+};
 
-// Protect RAM: Spawning multiple threads on mobile triggers kernel memory terminations (Safari Jetsam)
+// Protect mobile memory ceiling: Clamp active ONNX thread pool size to 1
 env.backends.onnx.wasm!.numThreads = 1;
 env.backends.onnx.wasm!.simd = true;
 env.backends.onnx.wasm!.proxy = false;
+
 
 class EmbeddingWorker {
     private extractor: any = null;

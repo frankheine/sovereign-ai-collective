@@ -14,13 +14,13 @@
   <meta name="theme-color" content="#000000" />
 
   <!-- SOVEREIGN ZERO-TRUST DIODE CSP -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
-                   script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'https://vercel.live'; 
-                   style-src 'self' 'unsafe-inline'; 
-                   connect-src 'self' ws://localhost:* wss://localhost:* https://searx.be https://search.mdosch.de https://paulgo.io; 
-                   worker-src 'self' blob:; 
-                   img-src 'self' data: https://*.googleusercontent.com;
-                   media-src 'self' data: blob:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+      script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://vercel.live;
+      style-src 'self' 'unsafe-inline';
+      connect-src 'self' ws://localhost:* wss://localhost:* https://searx.be https://search.mdosch.de https://paulgo.io https://vercel.live;
+      worker-src 'self' blob:;
+      img-src 'self' data: https://*.googleusercontent.com;
+      media-src 'self' data: blob:;">
 
   <!-- CRITICAL FIX: Updated to modern PWA standard to clear console warnings -->
   <link rel="manifest" href="/manifest.json" />
