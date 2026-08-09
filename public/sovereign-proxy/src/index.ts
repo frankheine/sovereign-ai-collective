@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 export default {
-  async fetch(request: Request, env: any): Promise<Response> {
+  async fetch(request) Request, env: any}: Promise<Response> {
     const ALLOWED_ORIGIN = 'https://sovereign-ai-collective.vercel.app';
     const corsHeaders = { 'Access-Control-Allow-Origin': ALLOWED_ORIGIN };
 
