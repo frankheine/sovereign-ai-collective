@@ -1,3 +1,12 @@
+const origin = request.headers.get('Origin');
+const allowedOrigin = (origin && origin.endsWith('.vercel.app')) 
+  ? origin 
+  : 'https://sovereign-ai-collective.vercel.app';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': allowedOrigin,
+};
+
 export default {
   async fetch(request: Request, env: any): Promise<Response> {
     const ALLOWED_ORIGIN = 'https://sovereign-ai-collective.vercel.app';
