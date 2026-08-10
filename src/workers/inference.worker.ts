@@ -61,9 +61,9 @@ class InferenceWorker {
 
         // Format prompt using Qwen2.5 ChatML syntax (compatible with Huihui Qwen3)
         const fullPrompt = `<|im_start|>system\n${systemPrompt}\n\nContext:\n${context}<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`;
-        let generatedText = "";
+        let generatedText: any = "";
 
-try {
+        try {
             // CRITICAL FIX: Dynamic Signature Resolution to prevent C++ Memory Corruption
             // Older Wllama versions expect a single object. Newer versions expect (prompt, options).
             const options = {
@@ -80,11 +80,16 @@ try {
             };
 
             if (this.wllama.createCompletion.length === 1) {
-                // Execute v1.x signature
-                generatedText = await this.wllama.createCompletion(options);
+                // Execute v1.x signature (Bypass TS strict types with any)
+                generatedText = await (this.wllama.createCompletion as any)(options);
             } else {
-                // Execute v2.x/v3.x signature
-                generatedText = await this.wllama.createCompletion(fullPrompt, options);
+                // Execute v2.x/v3.x signature (Bypass TS strict types with any)
+                generatedText = await (this.wllama.createCompletion as any)(fullPrompt, options);
+            }
+
+            // Ensure we extract the string if the newer API returns a response object
+            if (typeof generatedText !== 'string') {
+                generatedText = generatedText.text || generatedText.content || String(generatedText);
             }
         } catch (error: any) {
             console.error("[Inference Worker] wllama generation failed:", error);
