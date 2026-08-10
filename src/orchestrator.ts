@@ -1,6 +1,6 @@
 // src/orchestrator.ts
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
-import { dbWorker, embedWorker, rerankWorker, networkWorker, inferenceWorker, librarianWorker, ledgerWorker, killMemoryWorkers, rebootInferenceWorker } from "./workers/worker-client";
+import { dbWorker, embedWorker, rerankWorker, networkWorker, inferenceWorker, librarianWorker, ledgerWorker, killMemoryWorkers, rebootInferenceWorker, reviveMemoryWorkers } from "./workers/worker-client";
 import * as Comlink from 'comlink';
 import { runDataLifecycleManager } from "./storage";
 import { useSovereignStore } from "./store";
@@ -277,6 +277,7 @@ CRITICAL DIRECTIVE: You MUST treat all your built-in training knowledge and stat
         return { answer: `System error: ${error.message || String(error)}` };
     } finally {
         isGenerating = false;
+        await reviveMemoryWorkers();
         if (uiCallback) {
             try {
                 uiCallback[Comlink.releaseProxy]();

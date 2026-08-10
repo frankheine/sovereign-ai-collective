@@ -63,25 +63,30 @@ class InferenceWorker {
         const fullPrompt = `<|im_start|>system\n${systemPrompt}\n\nContext:\n${context}<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`;
         let generatedText = "";
 
-        try {
-            // Execute WASM inference using the v3.x single-object signature
-            generatedText = await (this.wllama as any).createCompletion({
-                prompt: fullPrompt,
+try {
+            // CRITICAL FIX: Dynamic Signature Resolution to prevent C++ Memory Corruption
+            // Older Wllama versions expect a single object. Newer versions expect (prompt, options).
+            const options = {
+                prompt: fullPrompt, // Fallback injection for v1.x
                 nPredict: 2048,
                 sampling: {
-                    temp: 0.3, // Low temperature for RAG precision
+                    temp: 0.3, 
                     top_p: 0.9,
                 },
-                onNewToken: (token: number, piece: Uint8Array | string) => {
-                    // Robust piece handling for cross-version compatibility
+                onNewToken: (token: number, piece: Uint8Array | string, currentText: string) => {
                     const tokenStr = piece instanceof Uint8Array ? new TextDecoder().decode(piece) : piece;
                     onProgress({ delta: tokenStr });
                 }
-            });
+            };
+
+            if (this.wllama.createCompletion.length === 1) {
+                // Execute v1.x signature
+                generatedText = await this.wllama.createCompletion(options);
+            } else {
+                // Execute v2.x/v3.x signature
+                generatedText = await this.wllama.createCompletion(fullPrompt, options);
+            }
         } catch (error: any) {
-            console.error("[Inference Worker] wllama generation failed:", error);
-            throw error;
-        }
 
         return generatedText.trim();
     }

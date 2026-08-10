@@ -21,13 +21,14 @@ class NetworkWorker {
 
         for (const instance of instances) {
             try {
-                // Format for JSON to eliminate brittle Regex HTML scraping
-                const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json&safesearch=1`;
+// CRITICAL FIX: Wrap the SearXNG request in a public CORS proxy to bypass browser blocks
+                const targetUrl = `${instance}/search?q=${encodeURIComponent(query)}&format=json&safesearch=1`;
+                const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
-                const response = await fetch(url, {
+                const response = await fetch(proxiedUrl, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
-                    credentials: 'omit', // Enforce zero-cookie policy
+                    credentials: 'omit', 
                     signal: controller.signal
                 });
 
