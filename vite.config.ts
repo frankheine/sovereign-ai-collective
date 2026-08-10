@@ -95,6 +95,7 @@ export default defineConfig({
         ]
       }
     }),
+  ],
   // FIX: Standardized binary asset serving for August 2026 compliance
   assetsInclude: ['**/*.wasm', '**/*.json', '**/*.onnx']
 });
