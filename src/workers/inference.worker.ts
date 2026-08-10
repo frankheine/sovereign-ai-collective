@@ -70,7 +70,7 @@ try {
                 prompt: fullPrompt, // Fallback injection for v1.x
                 nPredict: 2048,
                 sampling: {
-                    temp: 0.3, 
+                    temp: 0.3,
                     top_p: 0.9,
                 },
                 onNewToken: (token: number, piece: Uint8Array | string, currentText: string) => {
@@ -87,6 +87,9 @@ try {
                 generatedText = await this.wllama.createCompletion(fullPrompt, options);
             }
         } catch (error: any) {
+            console.error("[Inference Worker] wllama generation failed:", error);
+            throw error;
+        }
 
         return generatedText.trim();
     }

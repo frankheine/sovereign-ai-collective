@@ -58,6 +58,13 @@ export let networkWorker = Comlink.wrap<NetworkWorker>(networkWorkerInstance as 
 export let librarianWorker = Comlink.wrap<LibrarianWorker>(librarianWorkerInstance as Worker);
 export let ledgerWorker = Comlink.wrap<LedgerWorker>(ledgerWorkerInstance as Worker);
 
+export async function rebootInferenceWorker(): Promise<void> {
+    console.warn("🔄 [Worker Client] Hard rebooting Inference Worker to clear VRAM/Hangs...");
+    inferenceWorkerInstance.terminate();
+    inferenceWorkerInstance = new Worker(new URL('./inference.worker.ts', import.meta.url), { type: 'module' });
+    inferenceWorker = Comlink.wrap<InferenceWorker>(inferenceWorkerInstance);
+}
+
 /**
  * CRITICAL MEMORY GOVERNANCE:
  * Terminates all semantic and background specialists to create a "RAM valley."
