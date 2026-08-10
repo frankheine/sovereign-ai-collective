@@ -71,10 +71,30 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectManifest: {
         maximumFileSizeToCacheInBytes: 260000000,
-        globIgnores: ['**/*.gguf'] // Prevent redundant caching of 400MB models
+        globIgnores: ['**/*.gguf']
+      },
+      manifest: {
+        name: 'Sovereign AI Collective',
+        short_name: 'UNCUTstash',
+        description: 'Take Back Control of Your Data',
+        theme_color: '#000000',
+        background_color: '#000000',
+        display: 'standalone',
+        icons: [
+          {
+            src: '/logos/UNCUTstash_icon_120.png',
+            sizes: '120x120',
+            type: 'image/png'
+          },
+          {
+            src: '/logos/UNCUTstash_Logo_512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }
+        ]
       }
     }),
-  ],
   // FIX: Standardized binary asset serving for August 2026 compliance
   assetsInclude: ['**/*.wasm', '**/*.json', '**/*.onnx']
 });

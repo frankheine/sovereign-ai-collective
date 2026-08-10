@@ -2,7 +2,7 @@
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import { useLocalRuntime, AssistantRuntimeProvider } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/thread";
-import { ragApp, setActiveProgressCallback, startManagerAgent } from "@/orchestrator";
+import { ragApp, startManagerAgent } from "@/orchestrator";
 import { SovereignBootloader } from "@/workers/custom-loader";
 import ModelSelector from "@/components/ModelSelector";
 import StyleSelector from "@/components/StyleSelector";
@@ -153,9 +153,13 @@ export default function App() {
         let done = false;
         let error: any = null;
 
-        setActiveProgressCallback((msg) => queue.push(msg));
-
-        ragApp.invoke({ query: queryText }, { signal: abortSignal })
+        ragApp.invoke(
+          { query: queryText },
+          {
+            signal: abortSignal,
+            configurable: { onProgress: (msg: any) => queue.push(msg), signal: abortSignal }
+          }
+        )
           .then((state) => { queue.push({ type: "done", text: state.answer }); done = true; })
           .catch((e) => { error = e; done = true; });
 
@@ -197,7 +201,6 @@ export default function App() {
             await new Promise((r) => setTimeout(r, 50));
           }
         }
-        setActiveProgressCallback(null);
 
         if (error && !abortSignal.aborted) {
           yield { content: [{ type: "text" as const, text: `System error: ${error.message || error}` }] };

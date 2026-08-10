@@ -37,9 +37,9 @@ export interface LedgerWorker {
     runRecursiveHousekeeping(vectors: { id: number, vector: number[] }[]): Promise<{ id: number, metadata: any }[]>;
 }
 
-// 1. PERSISTENT WORKERS (Keep as const)
+// 1. PERSISTENT WORKERS
 const dbWorkerInstance = new Worker(new URL('./db.worker.ts', import.meta.url), { type: 'module' });
-const inferenceWorkerInstance = new Worker(new URL('./inference.worker.ts', import.meta.url), { type: 'module' });
+let inferenceWorkerInstance = new Worker(new URL('./inference.worker.ts', import.meta.url), { type: 'module' });
 
 // 2. VOLATILE WORKERS (Change to let to allow GC reassignment)
 let embedWorkerInstance: Worker | null = new Worker(new URL('./embedding.worker.ts', import.meta.url), { type: 'module' });
@@ -50,7 +50,14 @@ let ledgerWorkerInstance: Worker | null = new Worker(new URL('./ledger.worker.ts
 
 // 3. COMLINK WRAPPING (Cast volatile workers as Worker to satisfy Comlink types)
 export const dbWorker = Comlink.wrap<DBWorker>(dbWorkerInstance);
-export const inferenceWorker = Comlink.wrap<InferenceWorker>(inferenceWorkerInstance);
+export let inferenceWorker = Comlink.wrap<InferenceWorker>(inferenceWorkerInstance);
+
+export async function rebootInferenceWorker(): Promise<void> {
+    console.warn("🔄 [Worker Client] Hard rebooting Inference Worker to clear VRAM/Hangs...");
+    inferenceWorkerInstance.terminate();
+    inferenceWorkerInstance = new Worker(new URL('./inference.worker.ts', import.meta.url), { type: 'module' });
+    inferenceWorker = Comlink.wrap<InferenceWorker>(inferenceWorkerInstance);
+}
 
 export const embedWorker = Comlink.wrap<EmbedWorker>(embedWorkerInstance as Worker);
 export const rerankWorker = Comlink.wrap<RerankWorker>(rerankWorkerInstance as Worker);
