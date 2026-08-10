@@ -74,6 +74,8 @@ export default defineConfig({
         globIgnores: ['**/*.gguf']
       },
       manifest: {
+        id: '/',
+        start_url: '/',
         name: 'Sovereign AI Collective',
         short_name: 'UNCUTstash',
         description: 'Take Back Control of Your Data',
