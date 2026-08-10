@@ -2,16 +2,18 @@
 import * as Comlink from 'comlink';
 
 class NetworkWorker {
-    // Public SearxNG nodes that allow CORS and return clean JSON.
-    // These act as privacy shields, stripping the user's IP before querying DDG/Google.
     private searxngInstances = [
         'https://searx.be',
         'https://search.mdosch.de',
         'https://searx.tiekoetter.com',
-        'https://paulgo.io'
+        'https://paulgo.io',
+        'https://searx.work',
+        'https://searx.ro',
+        'https://search.bus-hit.me',
+        'https://searx.nixnet.services'
     ];
 
-    async search(query: string): Promise<string[]> {
+async search(query: string): Promise<string[]> {
         const controller = new AbortController();
         // Retaining your excellent 30-second timeout architecture
         const timeoutId = setTimeout(() => controller.abort(), 30000);

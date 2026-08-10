@@ -64,17 +64,19 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    VitePWA({
-      strategies: 'injectManifest',
-      srcDir: 'src',
-      filename: 'sw.ts',
-      registerType: 'autoUpdate',
-      injectManifest: {
-        maximumFileSizeToCacheInBytes: 260000000,
-        globIgnores: ['**/*.gguf']
-      },
-      manifest: {
-        name: 'Sovereign AI Collective',
+VitePWA({
+  strategies: 'generateSW',
+  registerType: 'autoUpdate',
+  workbox: {
+    maximumFileSizeToCacheInBytes: 260000000,
+    globIgnores: ['**/*.gguf'],
+    navigateFallback: '/index.html', // CRITICAL: Prevents SPA 404s on Home Screen launch
+  },
+  manifest: {
+    id: 'https://sovereign-ai-collective.vercel.app/',
+    start_url: 'https://sovereign-ai-collective.vercel.app/',
+    scope: '/',
+    name: 'Sovereign AI Collective',
         short_name: 'UNCUTstash',
         description: 'Take Back Control of Your Data',
         theme_color: '#000000',

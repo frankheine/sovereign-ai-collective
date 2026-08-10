@@ -105,13 +105,18 @@ export async function killMemoryWorkers(): Promise<void> {
 export async function reviveMemoryWorkers(): Promise<void> {
     console.log("🌱 [Memory Governance] Reviving Memory Specialists...");
     
+export async function reviveMemoryWorkers(): Promise<void> {
+console.log("🌱 [Memory Governance] Reviving Memory Specialists...");
+
     if (!embedWorkerInstance) {
         embedWorkerInstance = new Worker(new URL('./embedding.worker.ts', import.meta.url), { type: 'module' });
         embedWorker = Comlink.wrap<EmbedWorker>(embedWorkerInstance);
+        await embedWorker.init().catch(e => console.warn("Embed init failed during revival", e));
     }
     if (!rerankWorkerInstance) {
         rerankWorkerInstance = new Worker(new URL('./rerank.worker.ts', import.meta.url), { type: 'module' });
         rerankWorker = Comlink.wrap<RerankWorker>(rerankWorkerInstance);
+        await rerankWorker.init().catch(e => console.warn("Rerank init failed during revival", e));
     }
     if (!networkWorkerInstance) {
         networkWorkerInstance = new Worker(new URL('./network.worker.ts', import.meta.url), { type: 'module' });

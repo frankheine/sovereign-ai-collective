@@ -252,6 +252,13 @@ CRITICAL DIRECTIVE: You MUST treat all your built-in training knowledge and stat
 
         const isTimeout = error.message?.includes("TimeoutError");
         const isAbort = error.message?.includes("AbortError");
+        const isUninitialized = error.message?.includes("not initialized");
+
+        if (isUninitialized) {
+            notify(`⚠️ Engine state lost. Forcing system reboot...`);
+            useSovereignStore.getState().setEngineState(false, false);
+            return { answer: `System rebooting to restore memory state. Please try your query again in a moment.` };
+        }
 
         if (isTimeout || isAbort) {
             notify(`⚠️ Engine ${isTimeout ? 'stalled' : 'aborted'}. Flushing VRAM and rebooting...`);
