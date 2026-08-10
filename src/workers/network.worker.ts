@@ -2,16 +2,18 @@
 import * as Comlink from 'comlink';
 
 class NetworkWorker {
-    // Public SearxNG nodes that allow CORS and return clean JSON.
-    // These act as privacy shields, stripping the user's IP before querying DDG/Google.
     private searxngInstances = [
         'https://searx.be',
         'https://search.mdosch.de',
         'https://searx.tiekoetter.com',
-        'https://paulgo.io'
+        'https://paulgo.io',
+        'https://searx.work',
+        'https://searx.ro',
+        'https://search.bus-hit.me',
+        'https://searx.nixnet.services'
     ];
 
-    async search(query: string): Promise<string[]> {
+async search(query: string): Promise<string[]> {
         const controller = new AbortController();
         // Retaining your excellent 30-second timeout architecture
         const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -21,13 +23,14 @@ class NetworkWorker {
 
         for (const instance of instances) {
             try {
-                // Format for JSON to eliminate brittle Regex HTML scraping
-                const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json&safesearch=1`;
+// CRITICAL FIX: Wrap the SearXNG request in a public CORS proxy to bypass browser blocks
+                const targetUrl = `${instance}/search?q=${encodeURIComponent(query)}&format=json&safesearch=1`;
+                const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
-                const response = await fetch(url, {
+                const response = await fetch(proxiedUrl, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
-                    credentials: 'omit', // Enforce zero-cookie policy
+                    credentials: 'omit', 
                     signal: controller.signal
                 });
 

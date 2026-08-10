@@ -48,9 +48,15 @@ let networkWorkerInstance: Worker | null = new Worker(new URL('./network.worker.
 let librarianWorkerInstance: Worker | null = new Worker(new URL('./librarian.worker.ts', import.meta.url), { type: 'module' });
 let ledgerWorkerInstance: Worker | null = new Worker(new URL('./ledger.worker.ts', import.meta.url), { type: 'module' });
 
-// 3. COMLINK WRAPPING (Cast volatile workers as Worker to satisfy Comlink types)
+// 3. COMLINK WRAPPING (Export as let so live bindings update when revived)
 export const dbWorker = Comlink.wrap<DBWorker>(dbWorkerInstance);
 export let inferenceWorker = Comlink.wrap<InferenceWorker>(inferenceWorkerInstance);
+
+export let embedWorker = Comlink.wrap<EmbedWorker>(embedWorkerInstance as Worker);
+export let rerankWorker = Comlink.wrap<RerankWorker>(rerankWorkerInstance as Worker);
+export let networkWorker = Comlink.wrap<NetworkWorker>(networkWorkerInstance as Worker);
+export let librarianWorker = Comlink.wrap<LibrarianWorker>(librarianWorkerInstance as Worker);
+export let ledgerWorker = Comlink.wrap<LedgerWorker>(ledgerWorkerInstance as Worker);
 
 export async function rebootInferenceWorker(): Promise<void> {
     console.warn("🔄 [Worker Client] Hard rebooting Inference Worker to clear VRAM/Hangs...");
@@ -58,12 +64,6 @@ export async function rebootInferenceWorker(): Promise<void> {
     inferenceWorkerInstance = new Worker(new URL('./inference.worker.ts', import.meta.url), { type: 'module' });
     inferenceWorker = Comlink.wrap<InferenceWorker>(inferenceWorkerInstance);
 }
-
-export const embedWorker = Comlink.wrap<EmbedWorker>(embedWorkerInstance as Worker);
-export const rerankWorker = Comlink.wrap<RerankWorker>(rerankWorkerInstance as Worker);
-export const networkWorker = Comlink.wrap<NetworkWorker>(networkWorkerInstance as Worker);
-export const librarianWorker = Comlink.wrap<LibrarianWorker>(librarianWorkerInstance as Worker);
-export const ledgerWorker = Comlink.wrap<LedgerWorker>(ledgerWorkerInstance as Worker);
 
 /**
  * CRITICAL MEMORY GOVERNANCE:
@@ -96,4 +96,37 @@ export async function killMemoryWorkers(): Promise<void> {
     ledgerWorkerInstance = null;
 
     console.log("🧹 [Memory Governance] RAM Valley created. Proceeding to Model Boot.");
+}
+
+/**
+ * CRITICAL MEMORY GOVERNANCE:
+ * Revives the semantic specialists after LLM generation completes so Perfect Recall can function.
+ */
+export async function reviveMemoryWorkers(): Promise<void> {
+    console.log("🌱 [Memory Governance] Reviving Memory Specialists...");
+    
+    if (!embedWorkerInstance) {
+        embedWorkerInstance = new Worker(new URL('./embedding.worker.ts', import.meta.url), { type: 'module' });
+        embedWorker = Comlink.wrap<EmbedWorker>(embedWorkerInstance);
+        await embedWorker.init().catch(e => console.warn("Embed init failed during revival", e));
+    }
+    if (!rerankWorkerInstance) {
+        rerankWorkerInstance = new Worker(new URL('./rerank.worker.ts', import.meta.url), { type: 'module' });
+        rerankWorker = Comlink.wrap<RerankWorker>(rerankWorkerInstance);
+        await rerankWorker.init().catch(e => console.warn("Rerank init failed during revival", e));
+    }
+    if (!networkWorkerInstance) {
+        networkWorkerInstance = new Worker(new URL('./network.worker.ts', import.meta.url), { type: 'module' });
+        networkWorker = Comlink.wrap<NetworkWorker>(networkWorkerInstance);
+    }
+    if (!librarianWorkerInstance) {
+        librarianWorkerInstance = new Worker(new URL('./librarian.worker.ts', import.meta.url), { type: 'module' });
+        librarianWorker = Comlink.wrap<LibrarianWorker>(librarianWorkerInstance);
+    }
+    if (!ledgerWorkerInstance) {
+        ledgerWorkerInstance = new Worker(new URL('./ledger.worker.ts', import.meta.url), { type: 'module' });
+        ledgerWorker = Comlink.wrap<LedgerWorker>(ledgerWorkerInstance);
+    }
+    
+    console.log("🌱 [Memory Governance] Specialists revived and ready.");
 }

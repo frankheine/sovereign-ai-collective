@@ -78,8 +78,7 @@ export class SovereignBootloader {
             // 3. ONLY AFTER GGUF IS FULLY SECURED ON DISK DO WE BIND AND SPIN UP SPECIALIST WORKERS
             onProgress(80, "Mounting SQLite Vector Database Specialist...");
             await dbWorker.init();
-
-            onProgress(85, "Booting ONNX Semantic Embedding & Rerank Engines...");
+onProgress(85, "Booting ONNX Semantic Embedding & Rerank Engines...");
 
             // Establish Comlink callback proxy
             const progressProxy = Comlink.proxy((msg: any) => {
@@ -95,10 +94,16 @@ export class SovereignBootloader {
             onProgress(90, "🧠 Initializing local cross-encoder reranker...");
             await rerankWorker.init(progressProxy);
 
+            // Safely release the proxy to prevent memory leaks
+            try {
+                (progressProxy as any)[Comlink.releaseProxy]();
+            } catch (e) {
+                console.debug("[Bootloader] Proxy release skipped:", e);
+            }
+
             // 4. Mount and initialize wllama WebGPU/WASM context
             onProgress(95, "Initializing local WebGPU inference context...");
             await inferenceWorker.init(targetModel);
-
             onProgress(98, "Establishing Zero-Trust Network Proxy tethers...");
             await this.sleep(300);
 

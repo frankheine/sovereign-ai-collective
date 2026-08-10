@@ -71,22 +71,45 @@ class InferenceWorker {
 
         // Format prompt using Qwen2.5 ChatML syntax (compatible with Huihui Qwen3)
         const fullPrompt = `<|im_start|>system\n${systemPrompt}\n\nContext:\n${context}<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`;
-        let generatedText = "";
+        let generatedText: any = "";
 
         try {
+<<<<<<< HEAD
             // Execute WASM inference using the corrected v3.x signature
             generatedText = await this.wllama.createCompletion(fullPrompt, {
+=======
+            // CRITICAL FIX: Dynamic Signature Resolution to prevent C++ Memory Corruption
+            // Older Wllama versions expect a single object. Newer versions expect (prompt, options).
+            const options = {
+                prompt: fullPrompt, // Fallback injection for v1.x
+>>>>>>> feature-dev
                 nPredict: 2048,
                 sampling: {
-                    temp: 0.3, // Low temperature for RAG precision
+                    temp: 0.3,
                     top_p: 0.9,
                 },
                 onNewToken: (token: number, piece: Uint8Array | string, currentText: string) => {
+<<<<<<< HEAD
                     // Robust piece handling for cross-version compatibility
+=======
+>>>>>>> feature-dev
                     const tokenStr = piece instanceof Uint8Array ? new TextDecoder().decode(piece) : piece;
                     onProgress({ delta: tokenStr });
                 }
-            });
+            };
+
+            if (this.wllama.createCompletion.length === 1) {
+                // Execute v1.x signature (Bypass TS strict types with any)
+                generatedText = await (this.wllama.createCompletion as any)(options);
+            } else {
+                // Execute v2.x/v3.x signature (Bypass TS strict types with any)
+                generatedText = await (this.wllama.createCompletion as any)(fullPrompt, options);
+            }
+
+            // Ensure we extract the string if the newer API returns a response object
+            if (typeof generatedText !== 'string') {
+                generatedText = generatedText.text || generatedText.content || String(generatedText);
+            }
         } catch (error: any) {
             console.error("[Inference Worker] wllama generation failed:", error);
             throw error;
